@@ -26,6 +26,24 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{FloatType, IntegerType}
+import org.apache.spark.{Partition, TaskContext}
+import scala.reflect.ClassTag
+
+
+class NodeAffinityRDD[U: ClassTag](prev: RDD[U]) extends RDD[U](prev) {
+  val nodeIPs = Array("sr595", "sr596", "sr597", "sr598")
+  override def getPreferredLocations(split: Partition): Seq[String] = {
+    System.out.println("xgbtck checklocation " +  String.valueOf(split.index) + " "
+           + nodeIPs(split.index / 7) + " "
+            );
+    Seq(nodeIPs(split.index / 7))
+  }
+  override def compute(split: Partition, context: TaskContext): Iterator[U] =
+    firstParent[U].compute(split, context)
+
+  override protected def getPartitions: Array[Partition] = firstParent[U].partitions
+
+}
 
 object DataUtils extends Serializable {
   private[spark] implicit class XGBLabeledPointFeatures(
@@ -124,14 +142,14 @@ object DataUtils extends Serializable {
       arrayOfRDDs: Array[RDD[(Int, XGBLabeledPoint)]]): Array[RDD[XGBLabeledPoint]] = {
     if (deterministicPartition) {
       arrayOfRDDs.map {rdd => rdd.partitionBy(new HashPartitioner(numWorkers))}.map {
-        rdd => rdd.map(_._2)
+        rdd => new NodeAffinityRDD(rdd.map(_._2))
       }
     } else {
       arrayOfRDDs.map(rdd => {
         if (rdd.getNumPartitions != numWorkers) {
-          rdd.map(_._2).repartition(numWorkers)
+          new NodeAffinityRDD(rdd.map(_._2)).repartition(numWorkers)
         } else {
-          rdd.map(_._2)
+          new NodeAffinityRDD(rdd.map(_._2))
         }
       })
     }
