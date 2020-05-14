@@ -130,13 +130,13 @@ private[this] class XGBoostExecutionParamsFactory(rawParams: Map[String, Any], s
   private def overrideParams(
       params: Map[String, Any],
       sc: SparkContext): Map[String, Any] = {
-    val coresPerTask = sc.getConf.getInt("spark.task.cpus", 1)
+    val coresPerTask = sc.getConf.getInt("spark.executor.cores", 1)
     var overridedParams = params
     if (overridedParams.contains("nthread")) {
       val nThread = overridedParams("nthread").toString.toInt
-      require(nThread <= coresPerTask,
-        s"the nthread configuration ($nThread) must be no larger than " +
-          s"spark.task.cpus ($coresPerTask)")
+//      require(nThread <= coresPerTask,
+//        s"the nthread configuration ($nThread) must be no larger than " +
+//          s"spark.task.cpus ($coresPerTask)")
     } else {
       overridedParams = overridedParams + ("nthread" -> coresPerTask)
     }
@@ -341,7 +341,8 @@ object XGBoost extends Serializable {
       rabitEnv: java.util.Map[String, String],
       obj: ObjectiveTrait,
       eval: EvalTrait,
-      prevBooster: Booster): Iterator[(Booster, Map[String, Array[Float]])] = {
+      prevBooster: Booster,
+      sparkContext: sc): Iterator[(Booster, Map[String, Array[Float]])] = {
     // to workaround the empty partitions in training dataset,
     // this might not be the best efficient implementation, see
     // (https://github.com/dmlc/xgboost/issues/1277)
@@ -362,14 +363,23 @@ object XGBoost extends Serializable {
       val numEarlyStoppingRounds = xgbExecutionParam.earlyStoppingParams.numEarlyStoppingRounds
       val metrics = Array.tabulate(watches.size)(_ => Array.ofDim[Float](numRounds))
       val externalCheckpointParams = xgbExecutionParam.checkpointParam
+
+      System.out.println("xgbtck before_tomap " +  String.valueOf(Rabit.getRank) + " "
+          + String.valueOf(java.lang.System.currentTimeMillis))
+      val watchesmap = watches.toMap
+      System.out.println("xgbtck after_tomap " +  String.valueOf(Rabit.getRank) + " "
+          + String.valueOf(java.lang.System.currentTimeMillis))
+
+      sc.getPersistentRDDs().foreach(x => x._2.unpersist())
+
       val booster = if (makeCheckpoint) {
         SXGBoost.trainAndSaveCheckpoint(
-          watches.toMap("train"), xgbExecutionParam.toMap, numRounds,
-          watches.toMap, metrics, obj, eval,
+          watchesmap("train"), xgbExecutionParam.toMap, numRounds,
+          watchesmap, metrics, obj, eval,
           earlyStoppingRound = numEarlyStoppingRounds, prevBooster, externalCheckpointParams)
       } else {
-        SXGBoost.train(watches.toMap("train"), xgbExecutionParam.toMap, numRounds,
-          watches.toMap, metrics, obj, eval,
+        SXGBoost.train(watchesmap("train"), xgbExecutionParam.toMap, numRounds,
+          watchesmap, metrics, obj, eval,
           earlyStoppingRound = numEarlyStoppingRounds, prevBooster)
       }
       Iterator(booster -> watches.toMap.keys.zip(metrics).toMap)
@@ -452,8 +462,10 @@ object XGBoost extends Serializable {
           processMissingValues(labeledPoints, xgbExecutionParams.missing,
             xgbExecutionParams.allowNonZeroForMissing),
           getCacheDirName(xgbExecutionParams.useExternalMemory))
+        System.out.println("xgbtck calltrain " +  String.valueOf(Rabit.getRank) + " "
+          + String.valueOf(java.lang.System.currentTimeMillis))
         buildDistributedBooster(watches, xgbExecutionParams, rabitEnv, xgbExecutionParams.obj,
-          xgbExecutionParams.eval, prevBooster)
+          xgbExecutionParams.eval, prevBooster, trainingData.sparkContext)
       }).cache()
     } else {
       coPartitionNoGroupSets(trainingData, evalSetsMap, xgbExecutionParams.numWorkers).
@@ -466,7 +478,7 @@ object XGBoost extends Serializable {
               },
               getCacheDirName(xgbExecutionParams.useExternalMemory))
             buildDistributedBooster(watches, xgbExecutionParams, rabitEnv, xgbExecutionParams.obj,
-              xgbExecutionParams.eval, prevBooster)
+              xgbExecutionParams.eval, prevBooster, trainingData.sparkContext)
         }.cache()
     }
   }
@@ -484,7 +496,7 @@ object XGBoost extends Serializable {
             xgbExecutionParam.allowNonZeroForMissing),
           getCacheDirName(xgbExecutionParam.useExternalMemory))
         buildDistributedBooster(watches, xgbExecutionParam, rabitEnv,
-          xgbExecutionParam.obj, xgbExecutionParam.eval, prevBooster)
+          xgbExecutionParam.obj, xgbExecutionParam.eval, prevBooster, trainingData.sparkContext)
       }).cache()
     } else {
       coPartitionGroupSets(trainingData, evalSetsMap, xgbExecutionParam.numWorkers).mapPartitions(
@@ -498,7 +510,7 @@ object XGBoost extends Serializable {
           buildDistributedBooster(watches, xgbExecutionParam, rabitEnv,
             xgbExecutionParam.obj,
             xgbExecutionParam.eval,
-            prevBooster)
+            prevBooster, trainingData.sparkContext)
         }).cache()
     }
   }

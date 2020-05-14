@@ -152,6 +152,8 @@ public class XGBoost {
     if (checkpointPath != null) {
       ecm = new ExternalCheckpointManager(checkpointPath, fs);
     }
+    System.out.println("xgbtck enter " +  String.valueOf(Rabit.getRank()) + " "
+             + String.valueOf(java.lang.System.currentTimeMillis()));
 
     for (Map.Entry<String, DMatrix> evalEntry : watches.entrySet()) {
       names.add(evalEntry.getKey());

@@ -147,7 +147,7 @@ object DataUtils extends Serializable {
     } else {
       arrayOfRDDs.map(rdd => {
         if (rdd.getNumPartitions != numWorkers) {
-          new NodeAffinityRDD(rdd.map(_._2)).repartition(numWorkers)
+          new NodeAffinityRDD(rdd.map(_._2))
         } else {
           new NodeAffinityRDD(rdd.map(_._2))
         }
@@ -192,6 +192,19 @@ object DataUtils extends Serializable {
       }
     }
     repartitionRDDs(deterministicPartition, numWorkers, arrayOfRDDs)
+      .map(
+      rdd => {
+        System.out.println("xgbtck coalesce_prev " + String.valueOf(rdd.getNumPartitions))
+        val cachedrdd = rdd.mapPartitions(iter => iter).cache()
+        cachedrdd.foreachPartition(() => _) // fixme remove this
+        System.out.println("xgbtck cachedrdd " + cachedrdd.toDebugString)
+        System.out.println("xgbtck cachedrdd_storagelevel " + cachedrdd.getStorageLevel)
+        // ExecutorInProcessCoalescePartitioner ignores numPartitions
+        val coalescerdd = cachedrdd.coalesce(1,
+          partitionCoalescer = Some(new ExecutorInProcessCoalescePartitioner()))
+        System.out.println("xgbtck coalesce_post " +  String.valueOf(coalescerdd.getNumPartitions))
+        coalescerdd
+    })
   }
 
 }
