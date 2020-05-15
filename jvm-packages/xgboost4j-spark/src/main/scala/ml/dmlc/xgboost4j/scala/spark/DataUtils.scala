@@ -33,12 +33,18 @@ import scala.reflect.ClassTag
 
 
 class NodeAffinityRDD[U: ClassTag](prev: RDD[U]) extends RDD[U](prev) {
-  val nodeIPs = Array("sr595", "sr596", "sr597", "sr598")
-  override def getPreferredLocations(split: Partition): Seq[String] = {
-    System.out.println("xgbtck checklocation " +  String.valueOf(split.index) + " "
-           + nodeIPs(split.index / 7) + " "
-            );
-    Seq(nodeIPs(split.index / 7))
+   override def getPreferredLocations(split: Partition): Seq[String] = {
+     val slaveStr = sys.env.getOrElse("SLAVE_NODES", "sr595;sr596;sr597;sr598")
+     val nodeIPs = slaveStr.split(";")
+
+     System.out.println("xgbtck checklocation " +  String.valueOf(nodeIPs.length) )
+     if (nodeIPs.length < 3) {
+       return Seq("")
+     }
+     System.out.println("xgbtck checklocation " +  String.valueOf(split.index) + " "
+            + nodeIPs(split.index / (7*8)) + " "
+            )
+     Seq(nodeIPs(split.index / (7*8)))
   }
   override def compute(split: Partition, context: TaskContext): Iterator[U] =
     firstParent[U].compute(split, context)
