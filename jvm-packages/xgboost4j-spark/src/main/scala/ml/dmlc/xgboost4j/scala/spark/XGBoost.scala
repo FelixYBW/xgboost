@@ -37,6 +37,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkContext, SparkParallelismTracker, TaskContext, TaskFailedListener}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.rdd.ExecutorInProcessCoalescePartitioner
 
 
 /**
@@ -454,14 +455,34 @@ object XGBoost extends Serializable {
       prevBooster: Booster,
       evalSetsMap: Map[String, RDD[XGBLabeledPoint]]): RDD[(Booster, Map[String, Array[Float]])] = {
     if (evalSetsMap.isEmpty) {
-      trainingData.mapPartitions(labeledPoints => {
+      val watchrdd = trainingData.mapPartitions(labeledPoints => {
         val watches = Watches.buildWatches(xgbExecutionParams,
           processMissingValues(labeledPoints, xgbExecutionParams.missing,
             xgbExecutionParams.allowNonZeroForMissing),
           getCacheDirName(xgbExecutionParams.useExternalMemory))
-        System.out.println("xgbtck calltrain " +  String.valueOf(Rabit.getRank) + " "
+        Iterator(watches)
+      }).cache()
+
+      System.out.println("xgbtck materialize_watch_begin " + String.valueOf(Rabit.getRank) + " "
           + String.valueOf(java.lang.System.currentTimeMillis))
-        buildDistributedBooster(watches, xgbExecutionParams, rabitEnv, xgbExecutionParams.obj,
+      watchrdd.count()
+      System.out.println("xgbtck materialize_watch_end " + String.valueOf(Rabit.getRank) + " "
+          + String.valueOf(java.lang.System.currentTimeMillis))
+
+      System.out.println("xgbtck coalesce_prev " + String.valueOf(watchrdd.getNumPartitions))
+
+      val iscls = watchrdd.sparkContext.getConf.getInt("spark.xgboost.coalesce", 0)
+      var coalescedrdd = if ( iscls==0 ) watchrdd else watchrdd.coalesce(1,
+          partitionCoalescer = Some(new ExecutorInProcessCoalescePartitioner()))
+
+      System.out.println("xgbtck coalesce_prev " + String.valueOf(coalescedrdd.getNumPartitions))
+
+      System.out.println("xgbtck materialize_watch_end " + String.valueOf(Rabit.getRank) + " "
+          + String.valueOf(java.lang.System.currentTimeMillis))
+      coalescedrdd.mapPartitions(iter => {
+        System.out.println("xgbtck calltrain " + String.valueOf(Rabit.getRank) + " "
+          + String.valueOf(java.lang.System.currentTimeMillis))
+        buildDistributedBooster(iter.next, xgbExecutionParams, rabitEnv, xgbExecutionParams.obj,
           xgbExecutionParams.eval, prevBooster)
       }).cache()
     } else {

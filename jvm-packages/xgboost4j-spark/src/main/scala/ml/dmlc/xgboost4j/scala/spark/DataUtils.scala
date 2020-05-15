@@ -34,7 +34,8 @@ import scala.reflect.ClassTag
 
 class NodeAffinityRDD[U: ClassTag](prev: RDD[U]) extends RDD[U](prev) {
    override def getPreferredLocations(split: Partition): Seq[String] = {
-     val slaveStr = sys.env.getOrElse("SLAVE_NODES", "sr595;sr596;sr597;sr598")
+     val slaveStr = prev.sparkContext.getConf.get("spark.xgboost.SLAVE_NODES",
+       "sr595;sr596;sr597;sr598")
      val nodeIPs = slaveStr.split(";")
 
      System.out.println("xgbtck checklocation " +  String.valueOf(nodeIPs.length) )
@@ -42,9 +43,9 @@ class NodeAffinityRDD[U: ClassTag](prev: RDD[U]) extends RDD[U](prev) {
        return Seq("")
      }
      System.out.println("xgbtck checklocation " +  String.valueOf(split.index) + " "
-            + nodeIPs(split.index / (7*8)) + " "
+            + nodeIPs(split.index / (7)) + " "
             )
-     Seq(nodeIPs(split.index / (7*8)))
+     Seq(nodeIPs(split.index / (7)))
   }
   override def compute(split: Partition, context: TaskContext): Iterator[U] =
     firstParent[U].compute(split, context)
@@ -200,19 +201,6 @@ object DataUtils extends Serializable {
       }
     }
     repartitionRDDs(deterministicPartition, numWorkers, arrayOfRDDs)
-      .map(
-      rdd => {
-        System.out.println("xgbtck coalesce_prev " + String.valueOf(rdd.getNumPartitions))
-        val cachedrdd = rdd.mapPartitions(iter => iter).cache()
-        cachedrdd.foreachPartition(() => _) // fixme remove this
-        System.out.println("xgbtck cachedrdd " + cachedrdd.toDebugString)
-        System.out.println("xgbtck cachedrdd_storagelevel " + cachedrdd.getStorageLevel)
-        // ExecutorInProcessCoalescePartitioner ignores numPartitions
-        val coalescerdd = cachedrdd.coalesce(1,
-          partitionCoalescer = Some(new ExecutorInProcessCoalescePartitioner()))
-        System.out.println("xgbtck coalesce_post " +  String.valueOf(coalescerdd.getNumPartitions))
-        coalescerdd
-    })
   }
 
 }
