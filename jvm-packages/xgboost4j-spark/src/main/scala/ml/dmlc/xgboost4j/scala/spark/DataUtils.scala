@@ -27,6 +27,8 @@ import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{FloatType, IntegerType}
 import org.apache.spark.{Partition, TaskContext}
+import org.apache.spark.TaskContext
+import org.apache.spark.rdd.ExecutorInProcessCoalescePartitioner
 import scala.reflect.ClassTag
 
 

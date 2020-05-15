@@ -342,7 +342,7 @@ object XGBoost extends Serializable {
       obj: ObjectiveTrait,
       eval: EvalTrait,
       prevBooster: Booster,
-      sparkContext: sc): Iterator[(Booster, Map[String, Array[Float]])] = {
+      sc: SparkContext): Iterator[(Booster, Map[String, Array[Float]])] = {
     // to workaround the empty partitions in training dataset,
     // this might not be the best efficient implementation, see
     // (https://github.com/dmlc/xgboost/issues/1277)
@@ -370,7 +370,7 @@ object XGBoost extends Serializable {
       System.out.println("xgbtck after_tomap " +  String.valueOf(Rabit.getRank) + " "
           + String.valueOf(java.lang.System.currentTimeMillis))
 
-      sc.getPersistentRDDs().foreach(x => x._2.unpersist())
+      sc.getPersistentRDDs.foreach(x => x._2.unpersist(_))
 
       val booster = if (makeCheckpoint) {
         SXGBoost.trainAndSaveCheckpoint(
