@@ -37,6 +37,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkContext, SparkParallelismTracker, TaskContext, TaskFailedListener}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.rdd.ExecutorInProcessCoalescePartitioner
 
 
 /**
@@ -130,13 +131,13 @@ private[this] class XGBoostExecutionParamsFactory(rawParams: Map[String, Any], s
   private def overrideParams(
       params: Map[String, Any],
       sc: SparkContext): Map[String, Any] = {
-    val coresPerTask = sc.getConf.getInt("spark.task.cpus", 1)
+    val coresPerTask = sc.getConf.getInt("spark.executor.cores", 1)
     var overridedParams = params
     if (overridedParams.contains("nthread")) {
       val nThread = overridedParams("nthread").toString.toInt
-      require(nThread <= coresPerTask,
-        s"the nthread configuration ($nThread) must be no larger than " +
-          s"spark.task.cpus ($coresPerTask)")
+//      require(nThread <= coresPerTask,
+//        s"the nthread configuration ($nThread) must be no larger than " +
+//          s"spark.task.cpus ($coresPerTask)")
     } else {
       overridedParams = overridedParams + ("nthread" -> coresPerTask)
     }
@@ -350,6 +351,8 @@ object XGBoost extends Serializable {
         s"detected an empty partition in the training data, partition ID:" +
           s" ${TaskContext.getPartitionId()}")
     }
+    System.out.println("xgbtck enterdistributedbooster " +  String.valueOf(Rabit.getRank) + " "
+          + String.valueOf(java.lang.System.currentTimeMillis))
     val taskId = TaskContext.getPartitionId().toString
     val attempt = TaskContext.get().attemptNumber.toString
     rabitEnv.put("DMLC_TASK_ID", taskId)
@@ -362,14 +365,19 @@ object XGBoost extends Serializable {
       val numEarlyStoppingRounds = xgbExecutionParam.earlyStoppingParams.numEarlyStoppingRounds
       val metrics = Array.tabulate(watches.size)(_ => Array.ofDim[Float](numRounds))
       val externalCheckpointParams = xgbExecutionParam.checkpointParam
+
+      System.out.println("xgbtck before_tomap " +  String.valueOf(Rabit.getRank) + " "
+          + String.valueOf(java.lang.System.currentTimeMillis))
+      val watchesmap = watches.toMap
+
       val booster = if (makeCheckpoint) {
         SXGBoost.trainAndSaveCheckpoint(
-          watches.toMap("train"), xgbExecutionParam.toMap, numRounds,
-          watches.toMap, metrics, obj, eval,
+          watchesmap("train"), xgbExecutionParam.toMap, numRounds,
+          watchesmap, metrics, obj, eval,
           earlyStoppingRound = numEarlyStoppingRounds, prevBooster, externalCheckpointParams)
       } else {
-        SXGBoost.train(watches.toMap("train"), xgbExecutionParam.toMap, numRounds,
-          watches.toMap, metrics, obj, eval,
+        SXGBoost.train(watchesmap("train"), xgbExecutionParam.toMap, numRounds,
+          watchesmap, metrics, obj, eval,
           earlyStoppingRound = numEarlyStoppingRounds, prevBooster)
       }
       Iterator(booster -> watches.toMap.keys.zip(metrics).toMap)
@@ -447,12 +455,34 @@ object XGBoost extends Serializable {
       prevBooster: Booster,
       evalSetsMap: Map[String, RDD[XGBLabeledPoint]]): RDD[(Booster, Map[String, Array[Float]])] = {
     if (evalSetsMap.isEmpty) {
-      trainingData.mapPartitions(labeledPoints => {
+      val watchrdd = trainingData.mapPartitions(labeledPoints => {
         val watches = Watches.buildWatches(xgbExecutionParams,
           processMissingValues(labeledPoints, xgbExecutionParams.missing,
             xgbExecutionParams.allowNonZeroForMissing),
           getCacheDirName(xgbExecutionParams.useExternalMemory))
-        buildDistributedBooster(watches, xgbExecutionParams, rabitEnv, xgbExecutionParams.obj,
+        Iterator(watches)
+      }).cache()
+
+      System.out.println("xgbtck materialize_watch_begin " + String.valueOf(Rabit.getRank) + " "
+          + String.valueOf(java.lang.System.currentTimeMillis))
+      watchrdd.count()
+      System.out.println("xgbtck materialize_watch_end " + String.valueOf(Rabit.getRank) + " "
+          + String.valueOf(java.lang.System.currentTimeMillis))
+
+      System.out.println("xgbtck coalesce_prev " + String.valueOf(watchrdd.getNumPartitions))
+
+      val iscls = watchrdd.sparkContext.getConf.getInt("spark.xgboost.coalesce", 0)
+      var coalescedrdd = if ( iscls==0 ) watchrdd else watchrdd.coalesce(1,
+          partitionCoalescer = Some(new ExecutorInProcessCoalescePartitioner()))
+
+      System.out.println("xgbtck coalesce_prev " + String.valueOf(coalescedrdd.getNumPartitions))
+
+      System.out.println("xgbtck materialize_watch_end " + String.valueOf(Rabit.getRank) + " "
+          + String.valueOf(java.lang.System.currentTimeMillis))
+      coalescedrdd.mapPartitions(iter => {
+        System.out.println("xgbtck calltrain " + String.valueOf(Rabit.getRank) + " "
+          + String.valueOf(java.lang.System.currentTimeMillis))
+        buildDistributedBooster(iter.next, xgbExecutionParams, rabitEnv, xgbExecutionParams.obj,
           xgbExecutionParams.eval, prevBooster)
       }).cache()
     } else {
