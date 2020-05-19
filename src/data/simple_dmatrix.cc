@@ -16,6 +16,45 @@ MetaInfo& SimpleDMatrix::Info() { return info_; }
 
 const MetaInfo& SimpleDMatrix::Info() const { return info_; }
 
+DMatrix* SimpleDMatrix::Combine(DMatrix* right) {
+  SparsePage& out_page = this->sparse_page_;
+
+  for (auto const &page : right->GetBatches<SparsePage>()) {
+    auto& r_data=page.data.HostVector();
+    auto& r_offset=page.offset.HostVector();
+    auto& h_data = out_page.data.HostVector();
+    auto& h_offset = out_page.offset.HostVector();
+    size_t rptr = h_offset.back();
+  
+    std::cout << "xgbtck combine " << r_data.size()  << " "
+      << h_data.size() << " "
+      << r_data.data() << "[ " << r_data.size() << " ] "
+      << h_data.data() << "[ " << h_data.size() << " ] "
+      << std::endl;
+
+    std::copy(r_data.begin(),r_data.end(),std::back_inserter(h_data));
+    std::transform(r_offset.begin(), r_offset.end(), std::back_inserter(h_offset),
+        [rptr](const size_t r) { return r+rptr;} );
+
+  }
+  this->Info().num_row_ +=right->Info().num_row_;
+  CHECK_EQ(this->Info().num_col_, right->Info().num_col_)
+          << "Inconsistent num columns";
+  this->Info().num_nonzero_ = out_page.offset.HostVector().back();
+  auto& labels = right->Info().labels_.HostVector();
+  std::copy(labels.begin(),labels.end(),std::back_inserter(this->Info().labels_.HostVector()));
+
+  auto& weights = right->Info().weights_.HostVector();
+  std::copy(weights.begin(),weights.end(),std::back_inserter(this->Info().weights_.HostVector()));
+
+  auto& base_margin = right->Info().base_margin_.HostVector();
+  std::copy(base_margin.begin(),base_margin.end(),std::back_inserter(this->Info().base_margin_.HostVector()));
+
+//groups not support yet.
+
+  return this;
+}
+
 BatchSet<SparsePage> SimpleDMatrix::GetRowBatches() {
   // since csr is the default data structure so `source_` is always available.
   auto begin_iter = BatchIterator<SparsePage>(
@@ -143,6 +182,7 @@ SimpleDMatrix::SimpleDMatrix(AdapterT* adapter, float missing, int nthread) {
   }
   info_.num_nonzero_ = data_vec.size();
   omp_set_num_threads(nthread_original);
+  std::cout << "xgbtck createdmatrixadapter " << this << std::endl;
 }
 
 SimpleDMatrix::SimpleDMatrix(dmlc::Stream* in_stream) {
@@ -153,6 +193,7 @@ SimpleDMatrix::SimpleDMatrix(dmlc::Stream* in_stream) {
   info_.LoadBinary(in_stream);
   in_stream->Read(&sparse_page_.offset.HostVector());
   in_stream->Read(&sparse_page_.data.HostVector());
+  std::cout << "xgbtck createdmatrixstream " << this << std::endl;
 }
 
 void SimpleDMatrix::SaveToLocalFile(const std::string& fname) {

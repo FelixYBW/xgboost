@@ -23,7 +23,7 @@ class SimpleDMatrix : public DMatrix {
   explicit SimpleDMatrix(AdapterT* adapter, float missing, int nthread);
 
   explicit SimpleDMatrix(dmlc::Stream* in_stream);
-  ~SimpleDMatrix() override = default;
+  ~SimpleDMatrix() override {std::cout << "xgbtck freedmatrix " << this << std::endl;}
 
   void SaveToLocalFile(const std::string& fname);
 
@@ -32,6 +32,8 @@ class SimpleDMatrix : public DMatrix {
   const MetaInfo& Info() const override;
 
   bool SingleColBlock() const override { return true; }
+
+  DMatrix* Combine(DMatrix* right) override;
 
   /*! \brief magic number used to identify SimpleDMatrix binary files */
   static const int kMagic = 0xffffab01;

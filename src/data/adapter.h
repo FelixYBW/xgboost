@@ -22,6 +22,9 @@
 
 #include "../c_api/c_api_error.h"
 
+extern "C" unsigned char *MD5(const unsigned char *d, size_t n, unsigned char *md);
+#define MD5_DIGEST_LENGTH     16
+
 namespace xgboost {
 namespace data {
 
@@ -528,6 +531,13 @@ class IteratorAdapter : public dmlc::DataIter<FileAdapterBatch> {
   FileAdapterBatch const& Value() const override {
     return *batch_.get();
   }
+// Print the MD5 sum as hex-digits.
+void print_md5_sum(unsigned char* md) {
+    int i;
+    for(i=0; i <MD5_DIGEST_LENGTH; i++) {
+            printf("%02x",md[i]);
+    }
+}
 
   // callback to set the data
   void SetData(const XGBoostBatchCSR& batch) {
@@ -537,6 +547,13 @@ class IteratorAdapter : public dmlc::DataIter<FileAdapterBatch> {
     index_.clear();
     value_.clear();
     offset_.insert(offset_.end(), batch.offset, batch.offset + batch.size + 1);
+  
+  unsigned char result[MD5_DIGEST_LENGTH];
+ 
+  MD5((unsigned char*) batch.value, sizeof(batch.value[0])*(*(batch.offset+batch.size)), result);
+	std::cout << "CreateDmatrix size= " << batch.size << " offset= " << *(batch.offset+batch.size) << " ";
+  print_md5_sum(result);
+	std::cout << std::endl;	
 
     if (batch.label != nullptr) {
       label_.insert(label_.end(), batch.label, batch.label + batch.size);

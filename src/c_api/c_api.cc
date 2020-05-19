@@ -9,6 +9,7 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <openssl/md5.h>
 
 #include "xgboost/base.h"
 #include "xgboost/data.h"
@@ -189,9 +190,31 @@ XGB_DLL int XGDMatrixSliceDMatrixEx(DMatrixHandle handle,
   API_END();
 }
 
+XGB_DLL int XGDMatrixCombineDMatrix(DMatrixHandle handle_left,
+                                  DMatrixHandle handle_right,
+                                  DMatrixHandle* out) {
+  API_BEGIN();
+  CHECK_HANDLE_BY_NAME(handle_left);
+  CHECK_HANDLE_BY_NAME(handle_right);
+  DMatrix* dmat = static_cast<std::shared_ptr<DMatrix>*>(handle_left)->get();
+  DMatrix* dmat_right = static_cast<std::shared_ptr<DMatrix>*>(handle_right)->get();
+
+  dmat->Combine(dmat_right);
+  *out = new std::shared_ptr<DMatrix>(*(static_cast<std::shared_ptr<DMatrix>*>(handle_left)));
+
+  std::cout << "xgbtck combinehandle " << *out << " [" << dmat << "] "
+    << handle_left << " [" << dmat << "] "
+    << handle_right << " [" << dmat_right <<"] " << std::endl;
+
+  API_END();
+}
+
 XGB_DLL int XGDMatrixFree(DMatrixHandle handle) {
   API_BEGIN();
   CHECK_HANDLE();
+  std::cout << "xgbtck XGBMatrixFree " << handle << " "
+    << static_cast<std::shared_ptr<DMatrix>*>(handle)->get()
+    << std::endl;
   delete static_cast<std::shared_ptr<DMatrix>*>(handle);
   API_END();
 }

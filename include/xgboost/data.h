@@ -491,6 +491,11 @@ class DMatrix {
                          const std::string& cache_prefix = "",
                          size_t page_size = kPageSize);
 
+  virtual DMatrix* Combine(DMatrix* right) {
+    CHECK(false) << " this type of DMatrix not supported";
+    return this;
+  }
+
 
   /*! \brief page size 32 MB */
   static const size_t kPageSize = 32UL << 20UL;

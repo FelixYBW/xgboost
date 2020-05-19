@@ -71,6 +71,17 @@ JNIEXPORT jint JNICALL Java_ml_dmlc_xgboost4j_java_XGBoostJNI_XGDMatrixCreateFro
 JNIEXPORT jint JNICALL Java_ml_dmlc_xgboost4j_java_XGBoostJNI_XGDMatrixSliceDMatrix
   (JNIEnv *, jclass, jlong, jintArray, jlongArray);
 
+JNIEXPORT jint JNICALL Java_ml_dmlc_xgboost4j_java_XGBoostJNI_XGDMatrixComDMatrix
+  (JNIEnv *jenv, jclass jcls, jlong jhandle, jintArray jindexset, jlongArray jout);
+
+/*
+ * Class:     ml_dmlc_xgboost4j_java_XGBoostJNI
+ * Method:    XGDMatrixCombineDMatrix
+ * Signature: (JJ[J)I
+ */
+JNIEXPORT jint JNICALL Java_ml_dmlc_xgboost4j_java_XGBoostJNI_XGDMatrixCombineDMatrix
+  (JNIEnv *, jclass, jlong, jlong, jlongArray);
+
 /*
  * Class:     ml_dmlc_xgboost4j_java_XGBoostJNI
  * Method:    XGDMatrixFree

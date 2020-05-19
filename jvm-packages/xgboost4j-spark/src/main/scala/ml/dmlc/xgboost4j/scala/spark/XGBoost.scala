@@ -465,6 +465,8 @@ object XGBoost extends Serializable {
 
       System.out.println("xgbtck materialize_watch_begin " + String.valueOf(Rabit.getRank) + " "
           + String.valueOf(java.lang.System.currentTimeMillis))
+      // watchrdd.foreachPartition(_ => ())
+      watchrdd.foreachPartition(() => _)
       watchrdd.count()
       System.out.println("xgbtck materialize_watch_end " + String.valueOf(Rabit.getRank) + " "
           + String.valueOf(java.lang.System.currentTimeMillis))
@@ -472,14 +474,25 @@ object XGBoost extends Serializable {
       System.out.println("xgbtck coalesce_prev " + String.valueOf(watchrdd.getNumPartitions))
 
       val iscls = watchrdd.sparkContext.getConf.getInt("spark.xgboost.coalesce", 0)
-      var coalescedrdd = if ( iscls==0 ) watchrdd else watchrdd.coalesce(1,
+      val coalescedrdd = if ( iscls==0 ) watchrdd else watchrdd.coalesce(1,
           partitionCoalescer = Some(new ExecutorInProcessCoalescePartitioner()))
 
-      System.out.println("xgbtck coalesce_prev " + String.valueOf(coalescedrdd.getNumPartitions))
+      System.out.println("xgbtck coalesce_post_reduce_start "
+        + String.valueOf(coalescedrdd.getNumPartitions))
+      val reducedrdd = coalescedrdd.mapPartitions { iter =>
+          Iterator(iter.reduce { (l, r) =>
+            val rst = l.combine(r)
+            l.delete()
+            r.delete()
+            rst
+          })}.cache()
+      reducedrdd.count()
+//      watchrdd.foreachPartition(iter => iter.next.delete())
+      watchrdd.unpersist()
 
       System.out.println("xgbtck materialize_watch_end " + String.valueOf(Rabit.getRank) + " "
           + String.valueOf(java.lang.System.currentTimeMillis))
-      coalescedrdd.mapPartitions(iter => {
+      reducedrdd.mapPartitions(iter => {
         System.out.println("xgbtck calltrain " + String.valueOf(Rabit.getRank) + " "
           + String.valueOf(java.lang.System.currentTimeMillis))
         buildDistributedBooster(iter.next, xgbExecutionParams, rabitEnv, xgbExecutionParams.obj,
@@ -742,10 +755,19 @@ private class Watches private(
   def size: Int = toMap.size
 
   def delete(): Unit = {
-    toMap.values.foreach(_.delete())
+    datasets.foreach(_.delete())
     cacheDirName.foreach { name =>
       FileUtils.deleteDirectory(new File(name))
     }
+  }
+
+  def combine(rightWatches: Watches): Watches = {
+
+    val namemap = rightWatches.toMap
+    val result = toMap.map( ndpair => {
+      ndpair._2.combine(namemap(ndpair._1))
+    }).toArray
+    return new Watches(result, toMap.keys.toArray, cacheDirName)
   }
 
   override def toString: String = toMap.toString

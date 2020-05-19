@@ -43,9 +43,9 @@ class NodeAffinityRDD[U: ClassTag](prev: RDD[U]) extends RDD[U](prev) {
        return Seq("")
      }
      System.out.println("xgbtck checklocation " +  String.valueOf(split.index) + " "
-            + nodeIPs(split.index / (7)) + " "
+            + nodeIPs(split.index / (56)) + " "
             )
-     Seq(nodeIPs(split.index / (7)))
+     Seq(nodeIPs(split.index / (56)))
   }
   override def compute(split: Partition, context: TaskContext): Iterator[U] =
     firstParent[U].compute(split, context)
