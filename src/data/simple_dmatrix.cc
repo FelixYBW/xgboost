@@ -16,6 +16,7 @@ MetaInfo& SimpleDMatrix::Info() { return info_; }
 
 const MetaInfo& SimpleDMatrix::Info() const { return info_; }
 
+
 DMatrix* SimpleDMatrix::Combine(DMatrix* right) {
   SparsePage& out_page = this->sparse_page_;
 
@@ -53,6 +54,27 @@ DMatrix* SimpleDMatrix::Combine(DMatrix* right) {
 //groups not support yet.
 
   return this;
+}
+
+DMatrix* SimpleDMatrix::Slice(common::Span<int32_t const> ridxs) {
+  auto out = new SimpleDMatrix;
+  SparsePage& out_page = out->sparse_page_;
+  for (auto const &page : this->GetBatches<SparsePage>()) {
+    page.data.HostVector();
+    page.offset.HostVector();
+    auto& h_data = out_page.data.HostVector();
+    auto& h_offset = out_page.offset.HostVector();
+    size_t rptr{0};
+    for (auto ridx : ridxs) {
+      auto inst = page[ridx];
+      rptr += inst.size();
+      std::copy(inst.begin(), inst.end(), std::back_inserter(h_data));
+      h_offset.emplace_back(rptr);
+    }
+    out->Info() = this->Info().Slice(ridxs);
+    out->Info().num_nonzero_ = h_offset.back();
+  }
+  return out;
 }
 
 BatchSet<SparsePage> SimpleDMatrix::GetRowBatches() {
@@ -214,8 +236,6 @@ template SimpleDMatrix::SimpleDMatrix(CSCAdapter* adapter, float missing,
 template SimpleDMatrix::SimpleDMatrix(DataTableAdapter* adapter, float missing,
                                      int nthread);
 template SimpleDMatrix::SimpleDMatrix(FileAdapter* adapter, float missing,
-                                     int nthread);
-template SimpleDMatrix::SimpleDMatrix(DMatrixSliceAdapter* adapter, float missing,
                                      int nthread);
 template SimpleDMatrix::SimpleDMatrix(IteratorAdapter* adapter, float missing,
                                      int nthread);

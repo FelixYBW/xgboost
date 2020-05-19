@@ -82,14 +82,16 @@ template <typename BinIdxType>
 class DenseColumn: public Column<BinIdxType> {
  public:
   DenseColumn(ColumnType type, common::Span<const BinIdxType> index,
-              uint32_t index_base,
-              const std::vector<bool>::const_iterator missing_flags)
+              uint32_t index_base, const std::vector<bool>& missing_flags,
+              size_t feature_offset)
       : Column<BinIdxType>(type, index, index_base),
-        missing_flags_(missing_flags) {}
-  bool IsMissing(size_t idx) const { return missing_flags_[idx]; }
+        missing_flags_(missing_flags),
+        feature_offset_(feature_offset) {}
+  bool IsMissing(size_t idx) const { return missing_flags_[feature_offset_ + idx]; }
  private:
   /* flags for missing values in dense columns */
-  std::vector<bool>::const_iterator missing_flags_;
+  const std::vector<bool>& missing_flags_;
+  size_t feature_offset_;
 };
 
 /*! \brief a collection of columns, with support for construction from
@@ -208,10 +210,8 @@ class ColumnMatrix {
                                                  column_size };
     std::unique_ptr<const Column<BinIdxType> > res;
     if (type_[fid] == ColumnType::kDenseColumn) {
-      std::vector<bool>::const_iterator column_iterator = missing_flags_.begin();
-      advance(column_iterator, feature_offset);  // increment iterator to right position
       res.reset(new DenseColumn<BinIdxType>(type_[fid], bin_index, index_base_[fid],
-                                            column_iterator));
+                                             missing_flags_, feature_offset));
     } else {
       res.reset(new SparseColumn<BinIdxType>(type_[fid], bin_index, index_base_[fid],
                                        {&row_ind_[feature_offset], column_size}));
@@ -227,8 +227,7 @@ class ColumnMatrix {
     /* missing values make sense only for column with type kDenseColumn,
        and if no missing values were observed it could be handled much faster. */
     if (noMissingValues) {
-      const int32_t nthread = omp_get_max_threads();  // NOLINT
-      #pragma omp parallel for num_threads(nthread)
+#pragma omp parallel for num_threads(omp_get_max_threads())
       for (omp_ulong rid = 0; rid < nrow; ++rid) {
         const size_t ibegin = rid*nfeature;
         const size_t iend = (rid+1)*nfeature;

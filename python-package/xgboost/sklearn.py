@@ -244,6 +244,10 @@ class XGBModel(XGBModelBase):
         self.gpu_id = gpu_id
         self.validate_parameters = validate_parameters
 
+    def _more_tags(self):
+        '''Tags used for scikit-learn data validation.'''
+        return {'allow_nan': True}
+
     def get_booster(self):
         """Get the underlying xgboost Booster of this model.
 
@@ -292,10 +296,6 @@ class XGBModel(XGBModelBase):
         # 2. Return whatever in `**kwargs`.
         # 3. Merge them.
         params = super().get_params(deep)
-        if hasattr(self, '__copy__'):
-            warnings.warn('Calling __copy__ on Scikit-Learn wrapper, ' +
-                          'which may disable data cache and result in ' +
-                          'lower performance.')
         cp = copy.copy(self)
         cp.__class__ = cp.__class__.__bases__[0]
         params.update(cp.__class__.get_params(cp, deep))
@@ -510,6 +510,8 @@ class XGBModel(XGBModelBase):
                 raise TypeError('Unexpected input type for `eval_set`')
             if sample_weight_eval_set is None:
                 sample_weight_eval_set = [None] * len(eval_set)
+            else:
+                assert len(eval_set) == len(sample_weight_eval_set)
             evals = list(
                 DMatrix(eval_set[i][0], label=eval_set[i][1], missing=self.missing,
                         weight=sample_weight_eval_set[i], nthread=self.n_jobs)
@@ -788,6 +790,8 @@ class XGBClassifier(XGBModel, XGBClassifierBase):
         if eval_set is not None:
             if sample_weight_eval_set is None:
                 sample_weight_eval_set = [None] * len(eval_set)
+            else:
+                assert len(sample_weight_eval_set) == len(eval_set)
             evals = list(
                 DMatrix(eval_set[i][0],
                         label=self._le.transform(eval_set[i][1]),
