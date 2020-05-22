@@ -41,9 +41,6 @@ class NodeAffinityRDD[U: ClassTag](prev: RDD[U]) extends RDD[U](prev) {
        224)
 
      System.out.println("xgbtck checklocation " +  String.valueOf(nodeIPs.length) )
-     if (nodeIPs.length < 3) {
-       return Seq("")
-     }
      System.out.println("xgbtck checklocation " +  String.valueOf(split.index) + " "
             + nodeIPs(split.index / (partPerNode)) + " "
             )
