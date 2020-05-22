@@ -40,7 +40,6 @@ class NodeAffinityRDD[U: ClassTag](prev: RDD[U]) extends RDD[U](prev) {
      val partPerNode = prev.sparkContext.getConf.getInt("spark.xgboost.partsPerNode",
        224)
 
-     System.out.println("xgbtck checklocation " +  String.valueOf(nodeIPs.length) )
      System.out.println("xgbtck checklocation " +  String.valueOf(split.index) + " "
             + nodeIPs(split.index / (partPerNode)) + " "
             )

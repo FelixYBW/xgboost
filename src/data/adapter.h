@@ -548,14 +548,14 @@ void print_md5_sum(unsigned char* md) {
     index_.clear();
     value_.clear();
     offset_.insert(offset_.end(), batch.offset, batch.offset + batch.size + 1);
-  
+/* 
   unsigned char result[MD5_DIGEST_LENGTH];
  
   MD5((unsigned char*) batch.value, sizeof(batch.value[0])*(*(batch.offset+batch.size)), result);
     std::cout << "CreateDmatrix size= " << batch.size << " offset= " << *(batch.offset+batch.size) << " ";
   print_md5_sum(result);
 	std::cout << std::endl;	
-
+*/
     if (batch.label != nullptr) {
       label_.insert(label_.end(), batch.label, batch.label + batch.size);
     }

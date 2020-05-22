@@ -485,15 +485,12 @@ object XGBoost extends Serializable {
       System.out.println("xgbtck coalesce_post_reduce_start "
         + String.valueOf(coalescedrdd.getNumPartitions))
       val reducedrdd = coalescedrdd.mapPartitions { iter =>
-//        if (iter.size > 1){
           Iterator( iter.reduce { (l, r) =>
             val rst = l.combine(r)
             l.delete()
             r.delete()
             rst
             }
-//          )} else {
-//            iter
             )}.cache()
 //      reducedrdd.foreachPartition(() => _)
       System.out.println("xgbtck reducedrdd_cnt " + String.valueOf(reducedrdd.count()))

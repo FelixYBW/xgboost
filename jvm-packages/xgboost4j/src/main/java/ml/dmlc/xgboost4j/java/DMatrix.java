@@ -48,8 +48,8 @@ public class DMatrix {
       throw new NullPointerException("iter: null");
     }
     // 32k as batch size
-    // int batchSize = 32 << 10;
-    int batchSize = 719928/2;
+     int batchSize = 32 << 10;
+    // int batchSize = 719928/2;
     Iterator<DataBatch> batchIter = new DataBatch.BatchIterator(iter, batchSize);
     long[] out = new long[1];
     XGBoostJNI.checkCall(XGBoostJNI.XGDMatrixCreateFromDataIter(batchIter, cacheInfo, out));
