@@ -10,6 +10,16 @@
 #include "../common/random.h"
 #include "adapter.h"
 
+extern "C" unsigned char *MD5(const unsigned char *d, size_t n, unsigned char *md);
+#define MD5_DIGEST_LENGTH     16
+// Print the MD5 sum as hex-digits.
+void print_md5_sum(unsigned char* md) {
+    int i;
+    for(i=0; i <MD5_DIGEST_LENGTH; i++) {
+            printf("%02x",md[i]);
+    }
+}
+
 namespace xgboost {
 namespace data {
 MetaInfo& SimpleDMatrix::Info() { return info_; }
@@ -31,10 +41,13 @@ DMatrix* SimpleDMatrix::Combine(DMatrix* right) {
       << r_data.data() << "[ " << r_data.size() << " ] "
       << h_data.data() << "[ " << h_data.size() << " ] "
       << std::endl;
-
+/*
     std::copy(r_data.begin(),r_data.end(),std::back_inserter(h_data));
     std::transform(r_offset.begin(), r_offset.end(), std::back_inserter(h_offset),
         [rptr](const size_t r) { return r+rptr;} );
+*/
+    out_page.Push(page);
+
 
   }
   this->Info().num_row_ +=right->Info().num_row_;
@@ -51,7 +64,35 @@ DMatrix* SimpleDMatrix::Combine(DMatrix* right) {
   std::copy(base_margin.begin(),base_margin.end(),std::back_inserter(this->Info().base_margin_.HostVector()));
 
 //groups not support yet.
+//
+/*  unsigned char firstresult[MD5_DIGEST_LENGTH];
+  unsigned char secondresult[MD5_DIGEST_LENGTH];
+  
+  auto firsthalf = sparse_page_.data.HostVector().data();
+  auto halfsize = sparse_page_.data.HostVector().size()/2;
+  auto secondhalf = sparse_page_.data.HostVector().data()+halfsize;
 
+  MD5((unsigned char*) firsthalf , halfsize*sizeof( sparse_page_.data.HostVector()[0]) ,firstresult );
+  MD5((unsigned char*) secondhalf , halfsize*sizeof( sparse_page_.data.HostVector()[0]) ,secondresult );
+*/
+  std::cout << "xgbtck combinefinish " << this
+      << "\n   datasize = " << sparse_page_.data.Size() 
+      << "\n   offset = " << sparse_page_.offset.Size()
+      << "\n   offset_v = " << sparse_page_.offset.HostVector().back()
+      << "\n   info.row = " << info_.num_row_ 
+      << "\n   info.col = " << info_.num_col_
+      << "\n   info.nz = " << info_.num_nonzero_
+      << "\n   info.labelsize = " << info_.labels_.Size()
+      << "\n   info.wightssize = " << info_.weights_.Size()
+      << "\n   info.mrgsize = " << info_.base_margin_.Size()
+      << "\n   info.lbsize = " << info_.labels_lower_bound_.Size()
+      << "\n   info.upsize = " << info_.labels_upper_bound_.Size()
+      << "\n   info.groupsize = " << info_.group_ptr_.size();
+//  print_md5_sum(firstresult);
+//  printf("\n");
+//  print_md5_sum(secondresult);
+
+  std::cout << std::endl;
   return this;
 }
 
@@ -182,7 +223,38 @@ SimpleDMatrix::SimpleDMatrix(AdapterT* adapter, float missing, int nthread) {
   }
   info_.num_nonzero_ = data_vec.size();
   omp_set_num_threads(nthread_original);
-  std::cout << "xgbtck createdmatrixadapter " << this << std::endl;
+
+
+/*  unsigned char firstresult[MD5_DIGEST_LENGTH];
+  unsigned char secondresult[MD5_DIGEST_LENGTH];
+  
+  auto firsthalf = sparse_page_.data.HostVector().data();
+  auto halfsize = sparse_page_.data.HostVector().size()/2;
+  auto secondhalf = sparse_page_.data.HostVector().data()+halfsize;
+
+  MD5((unsigned char*) firsthalf , halfsize*sizeof( sparse_page_.data.HostVector()[0]) ,firstresult );
+  MD5((unsigned char*) secondhalf , halfsize*sizeof( sparse_page_.data.HostVector()[0]) ,secondresult );
+*/
+
+  std::cout << "xgbtck createdmatrixadapter " << this
+      << "\n   datasize = " << sparse_page_.data.Size() 
+      << "\n   offset = " << sparse_page_.offset.Size()
+      << "\n   offset_v = " << sparse_page_.offset.HostVector().back()
+      << "\n   info.row = " << info_.num_row_ 
+      << "\n   info.col = " << info_.num_col_
+      << "\n   info.nz = " << info_.num_nonzero_
+      << "\n   info.labelsize = " << info_.labels_.Size()
+      << "\n   info.wightssize = " << info_.weights_.Size()
+      << "\n   info.mrgsize = " << info_.base_margin_.Size()
+      << "\n   info.lbsize = " << info_.labels_lower_bound_.Size()
+      << "\n   info.upsize = " << info_.labels_upper_bound_.Size()
+      << "\n   info.groupsize = " << info_.group_ptr_.size();
+//  print_md5_sum(firstresult);
+//  printf("\n");
+//  print_md5_sum(secondresult);
+
+  std::cout << std::endl;
+
 }
 
 SimpleDMatrix::SimpleDMatrix(dmlc::Stream* in_stream) {

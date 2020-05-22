@@ -37,15 +37,17 @@ class NodeAffinityRDD[U: ClassTag](prev: RDD[U]) extends RDD[U](prev) {
      val slaveStr = prev.sparkContext.getConf.get("spark.xgboost.SLAVE_NODES",
        "sr595;sr596;sr597;sr598")
      val nodeIPs = slaveStr.split(";")
+     val partPerNode = prev.sparkContext.getConf.getInt("spark.xgboost.partsPerNode",
+       224)
 
      System.out.println("xgbtck checklocation " +  String.valueOf(nodeIPs.length) )
      if (nodeIPs.length < 3) {
        return Seq("")
      }
      System.out.println("xgbtck checklocation " +  String.valueOf(split.index) + " "
-            + nodeIPs(split.index / (56)) + " "
+            + nodeIPs(split.index / (partPerNode)) + " "
             )
-     Seq(nodeIPs(split.index / (56)))
+     Seq(nodeIPs(split.index / (partPerNode)))
   }
   override def compute(split: Partition, context: TaskContext): Iterator[U] =
     firstParent[U].compute(split, context)

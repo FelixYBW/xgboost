@@ -13,6 +13,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <openssl/md5.h>
 
 #include "xgboost/logging.h"
 #include "xgboost/base.h"
@@ -551,7 +552,7 @@ void print_md5_sum(unsigned char* md) {
   unsigned char result[MD5_DIGEST_LENGTH];
  
   MD5((unsigned char*) batch.value, sizeof(batch.value[0])*(*(batch.offset+batch.size)), result);
-	std::cout << "CreateDmatrix size= " << batch.size << " offset= " << *(batch.offset+batch.size) << " ";
+    std::cout << "CreateDmatrix size= " << batch.size << " offset= " << *(batch.offset+batch.size) << " ";
   print_md5_sum(result);
 	std::cout << std::endl;	
 

@@ -461,11 +461,16 @@ object XGBoost extends Serializable {
             xgbExecutionParams.allowNonZeroForMissing),
           getCacheDirName(xgbExecutionParams.useExternalMemory))
         Iterator(watches)
+      }).filter( watches => {
+        val tomap = watches.toMap
+        if (tomap.size == 0) {
+          watches.delete()
+        }
+        tomap.size>0
       }).cache()
 
       System.out.println("xgbtck materialize_watch_begin " + String.valueOf(Rabit.getRank) + " "
           + String.valueOf(java.lang.System.currentTimeMillis))
-      // watchrdd.foreachPartition(_ => ())
       watchrdd.foreachPartition(() => _)
       watchrdd.count()
       System.out.println("xgbtck materialize_watch_end " + String.valueOf(Rabit.getRank) + " "
@@ -480,12 +485,17 @@ object XGBoost extends Serializable {
       System.out.println("xgbtck coalesce_post_reduce_start "
         + String.valueOf(coalescedrdd.getNumPartitions))
       val reducedrdd = coalescedrdd.mapPartitions { iter =>
-          Iterator(iter.reduce { (l, r) =>
+        if (iter.size > 1){
+          Iterator( iter.reduce { (l, r) =>
             val rst = l.combine(r)
             l.delete()
             r.delete()
             rst
-          })}.cache()
+            }
+          )} else {
+            iter
+          }}.cache()
+      reducedrdd.foreachPartition(() => _)
       reducedrdd.count()
 //      watchrdd.foreachPartition(iter => iter.next.delete())
       watchrdd.unpersist()
@@ -493,9 +503,11 @@ object XGBoost extends Serializable {
       System.out.println("xgbtck materialize_watch_end " + String.valueOf(Rabit.getRank) + " "
           + String.valueOf(java.lang.System.currentTimeMillis))
       reducedrdd.mapPartitions(iter => {
+        val watches = iter.next
         System.out.println("xgbtck calltrain " + String.valueOf(Rabit.getRank) + " "
-          + String.valueOf(java.lang.System.currentTimeMillis))
-        buildDistributedBooster(iter.next, xgbExecutionParams, rabitEnv, xgbExecutionParams.obj,
+          + String.valueOf(java.lang.System.currentTimeMillis) + " "
+          + String.valueOf(watches.toMap("train")rowNum))
+        buildDistributedBooster(watches, xgbExecutionParams, rabitEnv, xgbExecutionParams.obj,
           xgbExecutionParams.eval, prevBooster)
       }).cache()
     } else {
