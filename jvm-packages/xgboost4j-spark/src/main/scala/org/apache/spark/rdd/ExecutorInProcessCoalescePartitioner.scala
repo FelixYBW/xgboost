@@ -33,8 +33,8 @@ class ExecutorInProcessCoalescePartitioner(val balanceSlack: Double = 0.10)
   def coalesce(maxPartitions: Int, prev: RDD[_]): Array[PartitionGroup] = {
     val map = new mutable.HashMap[String, mutable.HashSet[Partition]]()
 
-    System.out.println("xgbtck rddname " + prev.getClass.getName
-      + "\n " + prev.toDebugString)
+    // System.out.println("xgbtck rddname " + prev.getClass.getName
+    //  + "\n " + prev.toDebugString)
     // System.out.println("xgbtck rddname " + prev.prev().getClass.getName)
     // System.out.println("xgbtck rddname " + prev.prev().prev().getClass.getName)
 
@@ -43,14 +43,14 @@ class ExecutorInProcessCoalescePartitioner(val balanceSlack: Double = 0.10)
       val loc = prev.context.getPreferredLocs(prev, p.index)
       loc.foreach{
       case location : ExecutorCacheTaskLocation =>
-        System.out.println("xgbtck partitionloc " + location.getClass.getName)
+        // System.out.println("xgbtck partitionloc " + location.getClass.getName)
         val execLoc = "executor_" + location.host + "_" + location.executorId
         val partValue = map.getOrElse(execLoc, new mutable.HashSet[Partition]())
         partValue.add(p)
         map.put(execLoc, partValue)
-        System.out.println("xgbtck coalescePartitioner partid"
-          +  String.valueOf(p.index)
-          + " location = " + execLoc)
+        // System.out.println("xgbtck coalescePartitioner partid"
+        //  +  String.valueOf(p.index)
+        //  + " location = " + execLoc)
 
       case loc : TaskLocation =>
         System.out.println("xgbtck partitionloc " + loc.getClass.getName)
@@ -58,7 +58,7 @@ class ExecutorInProcessCoalescePartitioner(val balanceSlack: Double = 0.10)
         logger.error("Invalid location : ")
       }
     })
-      map.foreach(x => {
+    map.foreach(x => {
       val pg = new PartitionGroup(Some(x._1))
       val list = x._2.toList.sortWith(_.index < _.index);
       list.foreach(part => pg.partitions += part)
@@ -66,7 +66,15 @@ class ExecutorInProcessCoalescePartitioner(val balanceSlack: Double = 0.10)
     })
     if (groupArr.length == 0) throw new SparkException("No partitions or" +
       " no locations for partitions found.")
-    return groupArr.toArray
+
+    val sortedGroupArr = groupArr.sortWith(_.partitions(0).index < _.partitions(0).index)
+
+    sortedGroupArr.foreach(pg => {
+      System.out.print(" xgbtck executorcoalesce " + pg.prefLoc + " : ")
+      pg.partitions.foreach(part => System.out.print(String.valueOf(part.index) + " "))
+      System.out.print("\n")
+    })
+    return sortedGroupArr.toArray
   }
 }
 
