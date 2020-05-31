@@ -298,9 +298,9 @@ public class DMatrix {
    * @return combined DMatrix
    * @throws XGBoostError native error
    */
-  public DMatrix combine(DMatrix dmx) throws XGBoostError {
+  public DMatrix combine(DMatrix dmx, long totalSize) throws XGBoostError {
     long[] out = new long[1];
-    XGBoostJNI.checkCall(XGBoostJNI.XGDMatrixCombineDMatrix(handle, dmx.handle, out));
+    XGBoostJNI.checkCall(XGBoostJNI.XGDMatrixCombineDMatrix(handle, dmx.handle, totalSize, out));
     long sHandle = out[0];
     System.out.println("xgbtck javacombin " + String.valueOf(handle)
         + " " + String.valueOf(dmx.handle)

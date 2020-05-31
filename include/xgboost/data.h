@@ -491,7 +491,7 @@ class DMatrix {
                          const std::string& cache_prefix = "",
                          size_t page_size = kPageSize);
 
-  virtual DMatrix* Combine(DMatrix* right) {
+  virtual DMatrix* Combine(DMatrix* right, uint64_t total_size) {
     CHECK(false) << " this type of DMatrix not supported";
     return this;
   }

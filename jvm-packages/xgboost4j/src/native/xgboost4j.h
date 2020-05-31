@@ -80,7 +80,7 @@ JNIEXPORT jint JNICALL Java_ml_dmlc_xgboost4j_java_XGBoostJNI_XGDMatrixComDMatri
  * Signature: (JJ[J)I
  */
 JNIEXPORT jint JNICALL Java_ml_dmlc_xgboost4j_java_XGBoostJNI_XGDMatrixCombineDMatrix
-  (JNIEnv *, jclass, jlong, jlong, jlongArray);
+  (JNIEnv *, jclass, jlong, jlong, jlong, jlongArray);
 
 /*
  * Class:     ml_dmlc_xgboost4j_java_XGBoostJNI

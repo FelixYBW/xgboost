@@ -71,7 +71,7 @@ class XGBoostJNI {
   public final static native int XGDMatrixSliceDMatrix(long handle, int[] idxset, long[] out);
 
   public final static native int XGDMatrixCombineDMatrix(long handleLeft, long handleRight,
-		                                                 long[] out);
+		                                                 long totalSize, long[] out);
 
   public final static native int XGDMatrixFree(long handle);
 

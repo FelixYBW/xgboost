@@ -192,6 +192,7 @@ XGB_DLL int XGDMatrixSliceDMatrixEx(DMatrixHandle handle,
 
 XGB_DLL int XGDMatrixCombineDMatrix(DMatrixHandle handle_left,
                                   DMatrixHandle handle_right,
+                                  uint64_t total_size,
                                   DMatrixHandle* out) {
   API_BEGIN();
   CHECK_HANDLE_BY_NAME(handle_left);
@@ -199,7 +200,7 @@ XGB_DLL int XGDMatrixCombineDMatrix(DMatrixHandle handle_left,
   DMatrix* dmat = static_cast<std::shared_ptr<DMatrix>*>(handle_left)->get();
   DMatrix* dmat_right = static_cast<std::shared_ptr<DMatrix>*>(handle_right)->get();
 
-  dmat->Combine(dmat_right);
+  dmat->Combine(dmat_right, total_size);
   *out = new std::shared_ptr<DMatrix>(*(static_cast<std::shared_ptr<DMatrix>*>(handle_left)));
 
   std::cout << "xgbtck combinehandle " << *out << " [" << dmat << "] "
