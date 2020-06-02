@@ -23,7 +23,7 @@ class SimpleDMatrix : public DMatrix {
   explicit SimpleDMatrix(AdapterT* adapter, float missing, int nthread);
 
   explicit SimpleDMatrix(dmlc::Stream* in_stream);
-  ~SimpleDMatrix() override {std::cout << "xgbtck freedmatrix " << this << std::endl;}
+  ~SimpleDMatrix() override {}
 
   void SaveToLocalFile(const std::string& fname);
 

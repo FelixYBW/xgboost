@@ -29,6 +29,7 @@ import org.apache.spark.sql.types.{FloatType, IntegerType}
 import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.ExecutorInProcessCoalescePartitioner
+import scala.reflect.runtime.universe._
 import scala.reflect.ClassTag
 
 
@@ -39,6 +40,16 @@ class NodeAffinityRDD[U: ClassTag](prev: RDD[U]) extends RDD[U](prev) {
      val nodeIPs = slaveStr.split(";")
      val partPerNode = prev.sparkContext.getConf.getInt("spark.xgboost.partsPerNode",
        224)
+
+     val ru = scala.reflect.runtime.universe
+     val m = ru.runtimeMirror(prev.sparkContext.getClass.getClassLoader)
+     val im = m.reflect(prev.sparkContext)
+     val methodSymb = ru.typeOf[org.apache.spark.SparkContext].declaration(
+        ru.newTermName("getExecutorIds")).asMethod
+     val methodMirror = im.reflectMethod(methodSymb)
+     val executorids = methodMirror.apply()
+
+     executorids.asInstanceOf[Seq[String]].foreach(System.out.println(_))
 
      System.out.println("xgbtck checklocation " +  String.valueOf(split.index) + " "
             + nodeIPs(split.index / (partPerNode)) + " "

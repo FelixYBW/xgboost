@@ -53,14 +53,9 @@ DMatrix* SimpleDMatrix::Combine(DMatrix* right) {
   CHECK_EQ(this->Info().num_col_, right->Info().num_col_)
           << "Inconsistent num columns";
   this->Info().num_nonzero_ = out_page.offset.HostVector().back();
-  auto& labels = right->Info().labels_.HostVector();
-  std::copy(labels.begin(),labels.end(),std::back_inserter(this->Info().labels_.HostVector()));
-
-  auto& weights = right->Info().weights_.HostVector();
-  std::copy(weights.begin(),weights.end(),std::back_inserter(this->Info().weights_.HostVector()));
-
-  auto& base_margin = right->Info().base_margin_.HostVector();
-  std::copy(base_margin.begin(),base_margin.end(),std::back_inserter(this->Info().base_margin_.HostVector()));
+  Info().labels_.Append(right->Info().labels_);
+  Info().weights_.Append(right->Info().weights_);
+  Info().base_margin_.Append(right->Info().base_margin_);
 
 //groups not support yet.
 //

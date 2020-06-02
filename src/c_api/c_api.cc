@@ -212,9 +212,6 @@ XGB_DLL int XGDMatrixCombineDMatrix(DMatrixHandle handle_left,
 XGB_DLL int XGDMatrixFree(DMatrixHandle handle) {
   API_BEGIN();
   CHECK_HANDLE();
-  std::cout << "xgbtck XGBMatrixFree " << handle << " "
-    << static_cast<std::shared_ptr<DMatrix>*>(handle)->get()
-    << std::endl;
   delete static_cast<std::shared_ptr<DMatrix>*>(handle);
   API_END();
 }

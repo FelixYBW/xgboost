@@ -505,14 +505,14 @@ void SparsePage::Push(const SparsePage &batch) {
   std::memcpy(dmlc::BeginPtr(data_vec) + top,
               dmlc::BeginPtr(batch_data_vec),
               sizeof(Entry) * batch.data.Size());
-//  size_t begin = offset.Size();
-//  offset_vec.resize(begin + batch.Size());
-/*  for (size_t i = 0; i < batch.Size(); ++i) {
-    offset_vec[i + begin] = top + batch_offset_vec[i + 1];
-  }
-*/
+  size_t begin = offset.Size();
+  offset_vec.resize(begin + batch.Size());
+// for (size_t i = 0; i < batch.Size(); ++i) {
+//    offset_vec[i + begin] = top + batch_offset_vec[i + 1];
+//  }
 
-  std::transform(std::next(batch_offset_vec.begin()), batch_offset_vec.end(), std::back_inserter(offset_vec),
+
+  std::transform(std::next(batch_offset_vec.begin()), batch_offset_vec.end(), &offset_vec[begin],
         [top](const size_t r) { return r+top;} );
 
 }
