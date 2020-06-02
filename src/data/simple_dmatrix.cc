@@ -26,27 +26,12 @@ MetaInfo& SimpleDMatrix::Info() { return info_; }
 
 const MetaInfo& SimpleDMatrix::Info() const { return info_; }
 
-DMatrix* SimpleDMatrix::Combine(DMatrix* right) {
+DMatrix* SimpleDMatrix::Combine(DMatrix* right, uint64_t total_size) {
   SparsePage& out_page = this->sparse_page_;
 
   for (auto const &page : right->GetBatches<SparsePage>()) {
-/*    auto& r_data=page.data.HostVector();
-    auto& r_offset=page.offset.HostVector();
-    auto& h_data = out_page.data.HostVector();
-    auto& h_offset = out_page.offset.HostVector();
-    size_t rptr = h_offset.back();
-  
-    std::cout << "xgbtck combine " << r_data.size()  << " "
-      << h_data.size() << " "
-      << r_data.data() << "[ " << r_data.size() << " ] "
-      << h_data.data() << "[ " << h_data.size() << " ] "
-      << std::endl;
-*/
-/*
-    std::copy(r_data.begin(),r_data.end(),std::back_inserter(h_data));
-    std::transform(r_offset.begin(), r_offset.end(), std::back_inserter(h_offset),
-        [rptr](const size_t r) { return r+rptr;} );
-*/
+    out_page.data.HostVector().reserve(total_size);
+    out_page.offset.HostVector().reserve(total_size+1);
     out_page.Push(page);
   }
   this->Info().num_row_ +=right->Info().num_row_;

@@ -258,6 +258,7 @@ XGB_DLL int XGDMatrixSliceDMatrixEx(DMatrixHandle handle,
  */
 XGB_DLL int XGDMatrixCombineDMatrix(DMatrixHandle handle_left,
                                   DMatrixHandle handle_right,
+                                  uint64_t total_size,
                                   DMatrixHandle* out);
 
 /*!

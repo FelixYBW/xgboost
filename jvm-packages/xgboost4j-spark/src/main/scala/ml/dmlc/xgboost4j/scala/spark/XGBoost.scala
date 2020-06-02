@@ -485,8 +485,14 @@ object XGBoost extends Serializable {
       System.out.println("xgbtck coalesce_post_reduce_start "
         + String.valueOf(coalescedrdd.getNumPartitions))
       val reducedrdd = coalescedrdd.mapPartitions { iter =>
+          val totalsize = iter.foldLeft(Map("train" -> 0L,"test" -> 0L)) {
+           (l, r) => 
+             val merged = l.toSeq ++ r.rowNumMap.toSeq
+             merged.groupBy(_._1).mapValues(_.map(_._2).sum)
+          }
+        
           Iterator( iter.reduce { (l, r) =>
-            val rst = l.combine(r)
+            val rst = l.combine(r,totalsize)
             l.delete()
             r.delete()
             rst
@@ -757,11 +763,15 @@ private class Watches private(
     val names: Array[String],
     val cacheDirName: Option[String]) {
 
-  def toMap: Map[String, DMatrix] = {
+  val toMap: Map[String, DMatrix] = {
     names.zip(datasets).toMap.filter { case (_, matrix) => matrix.rowNum > 0 }
   }
-
-  def size: Int = toMap.size
+  
+  val rowNumMap: Map[String, Long] = {
+    toMap.map{ case (key, matrix) => (key, matrix.rowNum) }
+  }
+  
+  val size: Int = toMap.size
 
   def delete(): Unit = {
     datasets.foreach(_.delete())
@@ -770,15 +780,19 @@ private class Watches private(
     }
   }
 
-  def combine(rightWatches: Watches): Watches = {
+  def combine(rightWatches: Watches, rowMap: Map[String, Long]): Watches = {
 
     val namemap = rightWatches.toMap
     val result = toMap.map( ndpair => {
-      ndpair._2.combine(namemap(ndpair._1))
+      ndpair._2.combine(namemap(ndpair._1),rowMap(ndpair._1))
     }).toArray
     return new Watches(result, toMap.keys.toArray, cacheDirName)
   }
-
+  
+  def trainSize(): Seq[Long] = {
+    Seq(toMap("train").rowNum,toMap("test").rowNum)
+  }
+  
   override def toString: String = toMap.toString
 }
 
