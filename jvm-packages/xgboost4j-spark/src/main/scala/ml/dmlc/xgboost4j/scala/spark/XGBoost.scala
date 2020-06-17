@@ -485,20 +485,22 @@ object XGBoost extends Serializable {
       System.out.println("xgbtck coalesce_post_reduce_start "
         + String.valueOf(coalescedrdd.getNumPartitions))
       val reducedrdd = coalescedrdd.mapPartitions { iter =>
-          val totalsize = iter.foldLeft(Map("train" -> 0L, "test" -> 0L)) {
+          val matcharr = iter.toArray
+          val totalsize = matcharr.foldLeft(Map("train" -> 0L, "test" -> 0L)) {
            (l, r) =>
-             val merged = l.toSeq ++ r.rowNumMap.toSeq
+             val merged = l.toSeq ++ r.dataVecSizeMap.toSeq
              merged.groupBy(_._1).mapValues(_.map(_._2).sum)
           }
           totalsize.foreach( iter => System.out.println("xgbtck reduce_total "
             + iter._1 + " " + iter._2 ))
-          Iterator( iter.reduce { (l, r) =>
+          Iterator( matcharr.reduce { (l, r) =>
             val rst = l.combine(r, totalsize)
             l.delete()
             r.delete()
             rst
             }
             )}.cache()
+
 //      reducedrdd.foreachPartition(() => _)
       System.out.println("xgbtck reducedrdd_cnt " + String.valueOf(reducedrdd.count()))
 //      watchrdd.foreachPartition(iter => iter.next.delete())
@@ -768,8 +770,8 @@ private class Watches private(
     names.zip(datasets).toMap.filter { case (_, matrix) => matrix.rowNum > 0 }
   }
 
-  val rowNumMap: Map[String, Long] = {
-    toMap.map{ case (key, matrix) => (key, matrix.rowNum) }
+  val dataVecSizeMap: Map[String, Long] = {
+    toMap.map{ case (key, matrix) => (key, matrix.dataVecSize) }
   }
 
   val size: Int = toMap.size
