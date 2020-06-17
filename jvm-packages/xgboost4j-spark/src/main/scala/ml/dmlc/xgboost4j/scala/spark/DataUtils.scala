@@ -26,6 +26,42 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{FloatType, IntegerType}
+import org.apache.spark.{Partition, TaskContext}
+import org.apache.spark.TaskContext
+import org.apache.spark.rdd.ExecutorInProcessCoalescePartitioner
+import scala.reflect.runtime.universe._
+import scala.reflect.ClassTag
+
+
+class NodeAffinityRDD[U: ClassTag](prev: RDD[U]) extends RDD[U](prev) {
+   override def getPreferredLocations(split: Partition): Seq[String] = {
+     val slaveStr = prev.sparkContext.getConf.get("spark.xgboost.SLAVE_NODES",
+       "sr595;sr596;sr597;sr598")
+     val nodeIPs = slaveStr.split(";")
+     val partPerNode = prev.sparkContext.getConf.getInt("spark.xgboost.partsPerNode",
+       224)
+
+     val ru = scala.reflect.runtime.universe
+     val m = ru.runtimeMirror(prev.sparkContext.getClass.getClassLoader)
+     val im = m.reflect(prev.sparkContext)
+     val methodSymb = ru.typeOf[org.apache.spark.SparkContext].declaration(
+        ru.newTermName("getExecutorIds")).asMethod
+     val methodMirror = im.reflectMethod(methodSymb)
+     val executorids = methodMirror.apply()
+
+     executorids.asInstanceOf[Seq[String]].foreach(System.out.println(_))
+
+     System.out.println("xgbtck checklocation " +  String.valueOf(split.index) + " "
+            + nodeIPs(split.index / (partPerNode)) + " "
+            )
+     Seq(nodeIPs(split.index / (partPerNode)))
+  }
+  override def compute(split: Partition, context: TaskContext): Iterator[U] =
+    firstParent[U].compute(split, context)
+
+  override protected def getPartitions: Array[Partition] = firstParent[U].partitions
+
+}
 
 object DataUtils extends Serializable {
   private[spark] implicit class XGBLabeledPointFeatures(
@@ -124,16 +160,16 @@ object DataUtils extends Serializable {
       arrayOfRDDs: Array[RDD[(Int, XGBLabeledPoint)]]): Array[RDD[XGBLabeledPoint]] = {
     if (deterministicPartition) {
       arrayOfRDDs.map {rdd => rdd.partitionBy(new HashPartitioner(numWorkers))}.map {
-        rdd => rdd.map(_._2)
+        rdd => new NodeAffinityRDD(rdd.map(_._2))
       }
     } else {
       arrayOfRDDs.map(rdd => {
         if (rdd.getNumPartitions % numWorkers != 0 ) {
           val partitions = rdd.getNumPartitions +
             numWorkers - (rdd.getNumPartitions % numWorkers)
-          rdd.map(_._2).repartition(partitions)
+          new NodeAffinityRDD(rdd.map(_._2).repartition(partitions))
         } else {
-          rdd.map(_._2)
+          new NodeAffinityRDD(rdd.map(_._2))
         }
       })
     }

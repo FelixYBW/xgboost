@@ -198,6 +198,10 @@ XGB_DLL int XGDMatrixCombineDMatrix(DMatrixHandle handle_left,
   dmat->Combine(dmat_right, total_size);
   *out = new std::shared_ptr<DMatrix>(*(static_cast<std::shared_ptr<DMatrix>*>(handle_left)));
 
+  std::cout << "xgbtck combinehandle " << *out << " [" << dmat << "] "
+    << handle_left << " [" << dmat << "] "
+    << handle_right << " [" << dmat_right <<"] " << std::endl;
+
   API_END();
 }
 

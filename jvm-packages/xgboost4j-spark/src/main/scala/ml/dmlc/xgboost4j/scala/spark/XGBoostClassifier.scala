@@ -293,6 +293,9 @@ class XGBoostClassificationModel private[ml](
     val bBooster = dataset.sparkSession.sparkContext.broadcast(_booster)
     val appName = dataset.sparkSession.sparkContext.appName
 
+    System.out.println("xgbtck prediction_begin " + String.valueOf(Rabit.getRank) + " "
+          + String.valueOf(java.lang.System.currentTimeMillis))
+
     val resultRDD = dataset.asInstanceOf[Dataset[Row]].rdd.mapPartitions { rowIterator =>
       new AbstractIterator[Row] {
         private var batchCnt = 0
@@ -348,6 +351,8 @@ class XGBoostClassificationModel private[ml](
     }
 
     bBooster.unpersist(blocking = false)
+    System.out.println("xgbtck prediction_end " + String.valueOf(Rabit.getRank) + " "
+          + String.valueOf(java.lang.System.currentTimeMillis))
     dataset.sparkSession.createDataFrame(resultRDD, generateResultSchema(schema))
   }
 
@@ -488,7 +493,8 @@ class XGBoostClassificationModel private[ml](
 
   override def copy(extra: ParamMap): XGBoostClassificationModel = {
     val newModel = copyValues(new XGBoostClassificationModel(uid, numClasses, _booster), extra)
-    newModel.setSummary(summary).setParent(parent)
+
+    newModel.setSummary(trainingSummary.getOrElse(null)).setParent(parent)
   }
 
   override def write: MLWriter =

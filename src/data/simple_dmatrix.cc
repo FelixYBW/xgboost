@@ -10,6 +10,16 @@
 #include "../common/random.h"
 #include "adapter.h"
 
+extern "C" unsigned char *MD5(const unsigned char *d, size_t n, unsigned char *md);
+#define MD5_DIGEST_LENGTH     16
+// Print the MD5 sum as hex-digits.
+void print_md5_sum(unsigned char* md) {
+    int i;
+    for(i=0; i <MD5_DIGEST_LENGTH; i++) {
+            printf("%02x",md[i]);
+    }
+}
+
 namespace xgboost {
 namespace data {
 MetaInfo& SimpleDMatrix::Info() { return info_; }
@@ -195,6 +205,7 @@ SimpleDMatrix::SimpleDMatrix(dmlc::Stream* in_stream) {
   info_.LoadBinary(in_stream);
   in_stream->Read(&sparse_page_.offset.HostVector());
   in_stream->Read(&sparse_page_.data.HostVector());
+  std::cout << "xgbtck createdmatrixstream " << this << std::endl;
 }
 
 void SimpleDMatrix::SaveToLocalFile(const std::string& fname) {

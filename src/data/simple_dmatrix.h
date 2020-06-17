@@ -24,7 +24,7 @@ class SimpleDMatrix : public DMatrix {
   explicit SimpleDMatrix(AdapterT* adapter, float missing, int nthread);
 
   explicit SimpleDMatrix(dmlc::Stream* in_stream);
-  ~SimpleDMatrix() override = default;
+  ~SimpleDMatrix() override {}
 
   void SaveToLocalFile(const std::string& fname);
 
