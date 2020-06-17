@@ -337,7 +337,7 @@ public class DMatrix {
     XGBoostJNI.checkCall(XGBoostJNI.XGDMatrixDataVecSize(handle, size));
     return size[0];
   }
-  
+
   /**
    * save DMatrix to filePath
    */
