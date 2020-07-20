@@ -502,7 +502,7 @@ object XGBoost extends Serializable {
       }).cache()
 
       watchrdd.foreachPartition(() => _)
-      // watchrdd.count()
+      watchrdd.count()
       val reducedrdd = processWatchesRDD(watchrdd).cache()
       watchrdd.unpersist()
 
@@ -531,7 +531,7 @@ object XGBoost extends Serializable {
           }).cache()
 
       watchrdd.foreachPartition(() => _)
-      // watchrdd.count()
+      watchrdd.count()
       val reducedrdd = processWatchesRDD(watchrdd).cache()
       watchrdd.unpersist()
 
@@ -565,7 +565,7 @@ object XGBoost extends Serializable {
       }).cache()
 
       watchrdd.foreachPartition(() => _)
-      // watchrdd.count()
+      watchrdd.count()
       val reducedrdd = processWatchesRDD(watchrdd).cache()
       watchrdd.unpersist()
 
@@ -594,7 +594,7 @@ object XGBoost extends Serializable {
           }).cache()
 
       watchrdd.foreachPartition(() => _)
-      // watchrdd.count()
+      watchrdd.count()
       val reducedrdd = processWatchesRDD(watchrdd).cache()
       watchrdd.unpersist()
 
@@ -614,10 +614,13 @@ object XGBoost extends Serializable {
         partitionCoalescer = Some(new ExecutorInProcessCoalescePartitioner()))
     coalescedrdd.mapPartitions { iter =>
         val matcharr = iter.toArray
-        val totalsize = matcharr.foldLeft(0L) (
-          (size, watch) => size + watch.dataVecSizeMap("train"))
+        val totalsize = matcharr.foldLeft(Map("train" -> 0L, "test" -> 0L)) {
+           (l, r) =>
+             val merged = l.toSeq ++ r.dataVecSizeMap.toSeq
+             merged.groupBy(_._1).mapValues(_.map(_._2).sum)
+        }
         Iterator( matcharr.reduce { (l, r) =>
-          val rst = l.combineTrainDMatrix(r, totalsize)
+          val rst = l.combineDMatrix(r, totalsize)
           l.delete()
           r.delete()
           rst
@@ -844,14 +847,11 @@ private class Watches private(
     }
   }
 
-  def combineTrainDMatrix(rightWatches: Watches, numRows: Long): Watches = {
+  def combineDMatrix(rightWatches: Watches, rowMap: Map[String, Long]): Watches = {
     val namemap = rightWatches.toMap
-    val result = toMap.filter {
-      case (name, _) => name.matches("train")
-    }.map(ndpair => {
-      ndpair._2.combine(namemap(ndpair._1), numRows)
+    val result = toMap.map( ndpair => {
+      ndpair._2.combine(namemap(ndpair._1), rowMap(ndpair._1))
     }).toArray
-
     return new Watches(result, toMap.keys.toArray, cacheDirName)
   }
 
