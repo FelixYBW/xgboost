@@ -56,9 +56,9 @@ DMatrix* SimpleDMatrix::Combine(DMatrix* right, uint64_t total_size) {
   CHECK_EQ(this->Info().num_col_, right->Info().num_col_)
           << "Inconsistent num columns";
   this->Info().num_nonzero_ = out_page.offset.HostVector().back();
-  Info().labels_.Append(right->Info().labels_);
-  Info().base_margin_.Append(right->Info().base_margin_);
-  Info().weights_.Append(right->Info().weights_);
+  Info().labels_.Extend(right->Info().labels_);
+  Info().base_margin_.Extend(right->Info().base_margin_);
+  Info().weights_.Extend(right->Info().weights_);
 
   /*
    * TODO: Currently, the Combine method doesn't support the learning-to-rank
