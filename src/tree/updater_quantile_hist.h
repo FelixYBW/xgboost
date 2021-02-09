@@ -99,7 +99,7 @@ class DistributedHistRowsAdder;
 // training parameters specific to this algorithm
 struct CPUHistMakerTrainParam
     : public XGBoostParameter<CPUHistMakerTrainParam> {
-  bool single_precision_histogram;
+  bool single_precision_histogram = false;
   // declare parameters
   DMLC_DECLARE_PARAMETER(CPUHistMakerTrainParam) {
     DMLC_DECLARE_FIELD(single_precision_histogram).set_default(false).describe(
@@ -121,18 +121,22 @@ class QuantileHistMaker: public TreeUpdater {
 
   bool UpdatePredictionCache(const DMatrix* data,
                              HostDeviceVector<bst_float>* out_preds) override;
+  bool UpdatePredictionCacheMulticlass(const DMatrix* data,
+                                       HostDeviceVector<bst_float>* out_preds,
+                                       const int gid, const int ngroup) override;
 
   void LoadConfig(Json const& in) override {
     auto const& config = get<Object const>(in);
     FromJson(config.at("train_param"), &this->param_);
     try {
       FromJson(config.at("cpu_hist_train_param"), &this->hist_maker_param_);
-    } catch (std::out_of_range& e) {
+    } catch (std::out_of_range&) {
       // XGBoost model is from 1.1.x, so 'cpu_hist_train_param' is missing.
       // We add this compatibility check because it's just recently that we (developers) began
       // persuade R users away from using saveRDS() for model serialization. Hopefully, one day,
       // everyone will be using xgb.save().
-      LOG(WARNING) << "Attempted to load interal configuration for a model file that was generated "
+      LOG(WARNING)
+        << "Attempted to load internal configuration for a model file that was generated "
         << "by a previous version of XGBoost. A likely cause for this warning is that the model "
         << "was saved with saveRDS() in R or pickle.dump() in Python. We strongly ADVISE AGAINST "
         << "using saveRDS() or pickle.dump() so that the model remains accessible in current and "
@@ -190,7 +194,7 @@ class QuantileHistMaker: public TreeUpdater {
     /*! \brief current best solution */
     SplitEntry best;
     // constructor
-    explicit NodeEntry(const TrainParam& param)
+    explicit NodeEntry(const TrainParam&)
         : root_gain(0.0f), weight(0.0f) {}
   };
   // actual builder that runs the algorithm
@@ -228,7 +232,8 @@ class QuantileHistMaker: public TreeUpdater {
       if (param_.enable_feature_grouping > 0) {
         hist_builder_.BuildBlockHist(gpair, row_indices, gmatb, hist);
       } else {
-        hist_builder_.BuildHist(gpair, row_indices, gmat, hist, data_layout_ != kSparseData);
+        hist_builder_.BuildHist(gpair, row_indices, gmat, hist,
+                                data_layout_ != DataLayout::kSparseData);
       }
     }
 
@@ -241,7 +246,9 @@ class QuantileHistMaker: public TreeUpdater {
     }
 
     bool UpdatePredictionCache(const DMatrix* data,
-                               HostDeviceVector<bst_float>* p_out_preds);
+                               HostDeviceVector<bst_float>* p_out_preds,
+                               const int gid = 0, const int ngroup = 1);
+
     void SetHistSynchronizer(HistSynchronizer<GradientSumT>* sync);
     void SetHistRowsAdder(HistRowsAdder<GradientSumT>* adder);
 
@@ -441,7 +448,7 @@ class QuantileHistMaker: public TreeUpdater {
     // list of nodes whose histograms would be built explicitly.
     std::vector<ExpandEntry> nodes_for_explicit_hist_build_;
 
-    enum DataLayout { kDenseDataZeroBased, kDenseDataOneBased, kSparseData };
+    enum class DataLayout { kDenseDataZeroBased, kDenseDataOneBased, kSparseData };
     DataLayout data_layout_;
 
     common::Monitor builder_monitor_;

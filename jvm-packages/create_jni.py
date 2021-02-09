@@ -3,6 +3,7 @@ import errno
 import argparse
 import glob
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -116,34 +117,47 @@ if __name__ == "__main__":
             run("cmake .. " + " ".join(args) + maybe_generator)
             run("cmake --build . --config Release" + maybe_parallel_build)
 
-        with cd("demo/regression"):
+        with cd("demo/CLI/regression"):
             run(sys.executable + " mapfeat.py")
             run(sys.executable + " mknfold.py machine.txt 1")
 
+    xgboost4j = 'xgboost4j-gpu' if cli_args.use_cuda == 'ON' else 'xgboost4j'
+    xgboost4j_spark = 'xgboost4j-spark-gpu' if cli_args.use_cuda == 'ON' else 'xgboost4j-spark'
+
     print("copying native library")
-    library_name = {
-        "win32": "xgboost4j.dll",
-        "darwin": "libxgboost4j.dylib",
-        "linux": "libxgboost4j.so"
-    }[sys.platform]
-    maybe_makedirs("xgboost4j/src/main/resources/lib")
-    cp("../lib/" + library_name, "xgboost4j/src/main/resources/lib")
+    library_name, os_folder = {
+        "Windows": ("xgboost4j.dll", "windows"),
+        "Darwin": ("libxgboost4j.dylib", "macos"),
+        "Linux": ("libxgboost4j.so", "linux"),
+        "SunOS": ("libxgboost4j.so", "solaris"),
+    }[platform.system()]
+    arch_folder = {
+        "x86_64": "x86_64",  # on Linux & macOS x86_64
+        "amd64": "x86_64",  # on Windows x86_64
+        "i86pc": "x86_64",  # on Solaris x86_64
+        "sun4v": "sparc",  # on Solaris sparc
+        "arm64": "aarch64",  # on macOS & Windows ARM 64-bit
+        "aarch64": "aarch64"
+    }[platform.machine().lower()]
+    output_folder = "{}/src/main/resources/lib/{}/{}".format(xgboost4j, os_folder, arch_folder)
+    maybe_makedirs(output_folder)
+    cp("../lib/" + library_name, output_folder)
 
     print("copying pure-Python tracker")
     cp("../dmlc-core/tracker/dmlc_tracker/tracker.py",
-       "xgboost4j/src/main/resources")
+       "{}/src/main/resources".format(xgboost4j))
 
     print("copying train/test files")
-    maybe_makedirs("xgboost4j-spark/src/test/resources")
-    with cd("../demo/regression"):
+    maybe_makedirs("{}/src/test/resources".format(xgboost4j_spark))
+    with cd("../demo/CLI/regression"):
         run("{} mapfeat.py".format(sys.executable))
         run("{} mknfold.py machine.txt 1".format(sys.executable))
 
-    for file in glob.glob("../demo/regression/machine.txt.t*"):
-        cp(file, "xgboost4j-spark/src/test/resources")
+    for file in glob.glob("../demo/CLI/regression/machine.txt.t*"):
+        cp(file, "{}/src/test/resources".format(xgboost4j_spark))
     for file in glob.glob("../demo/data/agaricus.*"):
-        cp(file, "xgboost4j-spark/src/test/resources")
+        cp(file, "{}/src/test/resources".format(xgboost4j_spark))
 
-    maybe_makedirs("xgboost4j/src/test/resources")
+    maybe_makedirs("{}/src/test/resources".format(xgboost4j))
     for file in glob.glob("../demo/data/agaricus.*"):
-        cp(file, "xgboost4j/src/test/resources")
+        cp(file, "{}/src/test/resources".format(xgboost4j))

@@ -252,15 +252,6 @@ class SparsePage {
   /*! \brief an instance of sparse vector in the batch */
   using Inst = common::Span<Entry const>;
 
-  /*! \brief get i-th row from the batch */
-  inline Inst operator[](size_t i) const {
-    const auto& data_vec = data.HostVector();
-    const auto& offset_vec = offset.HostVector();
-    size_t size = offset_vec[i + 1] - offset_vec[i];
-    return {data_vec.data() + offset_vec[i],
-            static_cast<Inst::index_type>(size)};
-  }
-
   HostSparsePageView GetView() const {
     return {offset.ConstHostSpan(), data.ConstHostSpan()};
   }
@@ -421,7 +412,7 @@ class BatchIterator {
     return *(*impl_);
   }
 
-  bool operator!=(const BatchIterator& rhs) const {
+  bool operator!=(const BatchIterator&) const {
     CHECK(impl_ != nullptr);
     return !impl_->AtEnd();
   }
@@ -549,13 +540,14 @@ class DMatrix {
                          int max_bin);
 
   virtual DMatrix *Slice(common::Span<int32_t const> ridxs) = 0;
+  /*! \brief Number of rows per page in external memory.  Approximately 100MB per page for
+   *  dataset with 100 features. */
+  static const size_t kPageSize = 32UL << 12UL;
   virtual DMatrix* Combine(DMatrix* right, uint64_t total_size) {
     CHECK(false) << " this type of DMatrix not supported";
     return this;
   }
 
-  /*! \brief page size 32 MB */
-  static const size_t kPageSize = 32UL << 20UL;
 
  protected:
   virtual BatchSet<SparsePage> GetRowBatches() = 0;

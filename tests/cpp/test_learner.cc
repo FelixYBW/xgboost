@@ -11,6 +11,7 @@
 #include <xgboost/version_config.h>
 #include "xgboost/json.h"
 #include "../../src/common/io.h"
+#include "../../src/common/random.h"
 
 namespace xgboost {
 
@@ -118,7 +119,7 @@ TEST(Learner, Configuration) {
 
     // eval_metric is not part of configuration
     auto attr_names = learner->GetConfigurationArguments();
-    ASSERT_EQ(attr_names.size(), 1);
+    ASSERT_EQ(attr_names.size(), 1ul);
     ASSERT_EQ(attr_names.find(emetric), attr_names.cend());
     ASSERT_EQ(attr_names.at("foo"), "bar");
   }
@@ -127,7 +128,7 @@ TEST(Learner, Configuration) {
     std::unique_ptr<Learner> learner { Learner::Create({nullptr}) };
     learner->SetParams({{"foo", "bar"}, {emetric, "auc"}, {emetric, "entropy"}, {emetric, "KL"}});
     auto attr_names = learner->GetConfigurationArguments();
-    ASSERT_EQ(attr_names.size(), 1);
+    ASSERT_EQ(attr_names.size(), 1ul);
     ASSERT_EQ(attr_names.at("foo"), "bar");
   }
 }
@@ -181,7 +182,7 @@ TEST(Learner, JsonModelIO) {
     learner->SaveModel(&new_in);
 
     ASSERT_TRUE(IsA<Object>(out["learner"]["attributes"]));
-    ASSERT_EQ(get<Object>(out["learner"]["attributes"]).size(), 1);
+    ASSERT_EQ(get<Object>(out["learner"]["attributes"]).size(), 1ul);
     ASSERT_EQ(out, new_in);
   }
 }
@@ -198,7 +199,7 @@ TEST(Learner, JsonModelIO) {
 // ```
 TEST(Learner, MultiThreadedPredict) {
   size_t constexpr kRows = 1000;
-  size_t constexpr kCols = 1000;
+  size_t constexpr kCols = 100;
 
   std::shared_ptr<DMatrix> p_dmat{
       RandomDataGenerator{kRows, kCols, 0}.GenerateDMatrix()};
@@ -218,8 +219,12 @@ TEST(Learner, MultiThreadedPredict) {
     threads.emplace_back([learner, p_data] {
       size_t constexpr kIters = 10;
       auto &entry = learner->GetThreadLocal().prediction_entry;
+      HostDeviceVector<float> predictions;
       for (size_t iter = 0; iter < kIters; ++iter) {
-        learner->Predict(p_data, false, &entry.predictions);
+        learner->Predict(p_data, false, &entry.predictions, 0, 0);
+
+        learner->Predict(p_data, false, &predictions, 0, 0, false, true);  // leaf
+        learner->Predict(p_data, false, &predictions, 0, 0, false, false, true);  // contribs
       }
     });
   }
@@ -334,4 +339,25 @@ TEST(Learner, Seed) {
             get<String>(config["learner"]["generic_param"]["seed"]));
 }
 
+TEST(Learner, ConstantSeed) {
+  auto m = RandomDataGenerator{10, 10, 0}.GenerateDMatrix(true);
+  std::unique_ptr<Learner> learner{Learner::Create({m})};
+  learner->Configure();  // seed the global random
+
+  std::uniform_real_distribution<float> dist;
+  auto& rng = common::GlobalRandom();
+  float v_0 = dist(rng);
+
+  learner->SetParam("", "");
+  learner->Configure();  // check configure doesn't change the seed.
+  float v_1 = dist(rng);
+  CHECK_NE(v_0, v_1);
+
+  {
+    rng.seed(GenericParameter::kDefaultSeed);
+    std::uniform_real_distribution<float> dist;
+    float v_2 = dist(rng);
+    CHECK_EQ(v_0, v_2);
+  }
+}
 }  // namespace xgboost

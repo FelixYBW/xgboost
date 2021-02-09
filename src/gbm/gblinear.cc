@@ -47,6 +47,12 @@ struct GBLinearTrainParam : public XGBoostParameter<GBLinearTrainParam> {
         .describe("Maximum rows per batch.");
   }
 };
+
+void LinearCheckLayer(unsigned layer_begin, unsigned layer_end) {
+  CHECK_EQ(layer_begin, 0) << "Linear booster does not support prediction range.";
+  CHECK_EQ(layer_end, 0)   << "Linear booster does not support prediction range.";
+}
+
 /*!
  * \brief gradient boosted linear model
  */
@@ -71,6 +77,10 @@ class GBLinear : public GradientBooster {
     if (param_.updater == "gpu_coord_descent") {
       common::AssertGPUSupport();
     }
+  }
+
+  int32_t BoostedRounds() const override {
+    return model_.num_boosted_rounds;
   }
 
   void Load(dmlc::Stream* fi) override {
@@ -113,7 +123,7 @@ class GBLinear : public GradientBooster {
 
   void DoBoost(DMatrix *p_fmat,
                HostDeviceVector<GradientPair> *in_gpair,
-               PredictionCacheEntry* predt) override {
+               PredictionCacheEntry*) override {
     monitor_.Start("DoBoost");
 
     model_.LazyInitModel();
@@ -122,25 +132,23 @@ class GBLinear : public GradientBooster {
     if (!this->CheckConvergence()) {
       updater_->Update(in_gpair, p_fmat, &model_, sum_instance_weight_);
     }
-
+    model_.num_boosted_rounds++;
     monitor_.Stop("DoBoost");
   }
 
-  void PredictBatch(DMatrix *p_fmat,
-                    PredictionCacheEntry *predts,
-                    bool training,
-                    unsigned ntree_limit) override {
+  void PredictBatch(DMatrix *p_fmat, PredictionCacheEntry *predts,
+                    bool training, unsigned layer_begin, unsigned layer_end) override {
     monitor_.Start("PredictBatch");
+    LinearCheckLayer(layer_begin, layer_end);
     auto* out_preds = &predts->predictions;
-    CHECK_EQ(ntree_limit, 0U)
-        << "GBLinear::Predict ntrees is only valid for gbtree predictor";
     this->PredictBatchInternal(p_fmat, &out_preds->HostVector());
     monitor_.Stop("PredictBatch");
   }
   // add base margin
   void PredictInstance(const SparsePage::Inst &inst,
                        std::vector<bst_float> *out_preds,
-                       unsigned ntree_limit) override {
+                       unsigned layer_begin, unsigned layer_end) override {
+    LinearCheckLayer(layer_begin, layer_end);
     const int ngroup = model_.learner_model_param->num_output_group;
     for (int gid = 0; gid < ngroup; ++gid) {
       this->Pred(inst, dmlc::BeginPtr(*out_preds), gid,
@@ -148,24 +156,20 @@ class GBLinear : public GradientBooster {
     }
   }
 
-  void PredictLeaf(DMatrix *p_fmat,
-                   std::vector<bst_float> *out_preds,
-                   unsigned ntree_limit) override {
+  void PredictLeaf(DMatrix *, HostDeviceVector<bst_float> *, unsigned, unsigned) override {
     LOG(FATAL) << "gblinear does not support prediction of leaf index";
   }
 
   void PredictContribution(DMatrix* p_fmat,
-                           std::vector<bst_float>* out_contribs,
-                           unsigned ntree_limit, bool approximate, int condition = 0,
-                           unsigned condition_feature = 0) override {
+                           HostDeviceVector<bst_float>* out_contribs,
+                           unsigned layer_begin, unsigned layer_end, bool, int, unsigned) override {
     model_.LazyInitModel();
-    CHECK_EQ(ntree_limit, 0U)
-        << "GBLinear::PredictContribution: ntrees is only valid for gbtree predictor";
+    LinearCheckLayer(layer_begin, layer_end);
     const auto& base_margin = p_fmat->Info().base_margin_.ConstHostVector();
     const int ngroup = model_.learner_model_param->num_output_group;
     const size_t ncolumns = model_.learner_model_param->num_feature + 1;
     // allocate space for (#features + bias) times #groups times #rows
-    std::vector<bst_float>& contribs = *out_contribs;
+    std::vector<bst_float>& contribs = out_contribs->HostVector();
     contribs.resize(p_fmat->Info().num_row_ * ncolumns * ngroup);
     // make sure contributions is zeroed, we could be reusing a previously allocated one
     std::fill(contribs.begin(), contribs.end(), 0);
@@ -173,9 +177,10 @@ class GBLinear : public GradientBooster {
     for (const auto &batch : p_fmat->GetBatches<SparsePage>()) {
       // parallel over local batch
       const auto nsize = static_cast<bst_omp_uint>(batch.Size());
+      auto page = batch.GetView();
 #pragma omp parallel for schedule(static)
       for (bst_omp_uint i = 0; i < nsize; ++i) {
-        auto inst = batch[i];
+        auto inst = page[i];
         auto row_idx = static_cast<size_t>(batch.base_rowid + i);
         // loop over output groups
         for (int gid = 0; gid < ngroup; ++gid) {
@@ -195,9 +200,10 @@ class GBLinear : public GradientBooster {
   }
 
   void PredictInteractionContributions(DMatrix* p_fmat,
-                                       std::vector<bst_float>* out_contribs,
-                                       unsigned ntree_limit, bool approximate) override {
-    std::vector<bst_float>& contribs = *out_contribs;
+                                       HostDeviceVector<bst_float>* out_contribs,
+                                       unsigned layer_begin, unsigned layer_end, bool) override {
+    LinearCheckLayer(layer_begin, layer_end);
+    std::vector<bst_float>& contribs = out_contribs->HostVector();
 
     // linear models have no interaction effects
     const size_t nelements = model_.learner_model_param->num_feature *
@@ -231,7 +237,8 @@ class GBLinear : public GradientBooster {
     // start collecting the prediction
     const int ngroup = model_.learner_model_param->num_output_group;
     preds.resize(p_fmat->Info().num_row_ * ngroup);
-    for (const auto &batch : p_fmat->GetBatches<SparsePage>()) {
+    for (const auto &page : p_fmat->GetBatches<SparsePage>()) {
+      auto const& batch = page.GetView();
       // output convention: nrow * k, where nrow is number of rows
       // k is number of group
       // parallel over local batch
@@ -241,7 +248,7 @@ class GBLinear : public GradientBooster {
       }
 #pragma omp parallel for schedule(static)
       for (omp_ulong i = 0; i < nsize; ++i) {
-        const size_t ridx = batch.base_rowid + i;
+        const size_t ridx = page.base_rowid + i;
         // loop over output groups
         for (int gid = 0; gid < ngroup; ++gid) {
           bst_float margin =

@@ -44,6 +44,7 @@
 
 #if DMLC_ENABLE_STD_THREAD
 #include "../src/data/sparse_page_dmatrix.cc"
+#include "../src/data/sparse_page_source.cc"
 #endif
 
 // trees
@@ -66,6 +67,7 @@
 // global
 #include "../src/learner.cc"
 #include "../src/logging.cc"
+#include "../src/global_config.cc"
 #include "../src/common/common.cc"
 #include "../src/common/random.cc"
 #include "../src/common/charconv.cc"

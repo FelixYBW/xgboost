@@ -19,6 +19,7 @@
 #include "../common/math.h"
 #include "../common/version.h"
 #include "../common/group_data.h"
+#include "../common/threading_utils.h"
 #include "../data/adapter.h"
 #include "../data/iterative_device_dmatrix.h"
 
@@ -298,6 +299,12 @@ MetaInfo MetaInfo::Slice(common::Span<int32_t const> ridxs) const {
 
   out.feature_weigths.Resize(this->feature_weigths.Size());
   out.feature_weigths.Copy(this->feature_weigths);
+
+  out.feature_names = this->feature_names;
+  out.feature_types.Resize(this->feature_types.Size());
+  out.feature_types.Copy(this->feature_types);
+  out.feature_type_names = this->feature_type_names;
+
   return out;
 }
 
@@ -359,19 +366,41 @@ void MetaInfo::SetInfo(const char* key, const void* dptr, DataType dtype, size_t
     weights.resize(num);
     DISPATCH_CONST_PTR(dtype, dptr, cast_dptr,
                        std::copy(cast_dptr, cast_dptr + num, weights.begin()));
+    auto valid = std::all_of(weights.cbegin(), weights.cend(),
+                             [](float w) { return w >= 0; });
+    CHECK(valid) << "Weights must be positive values.";
   } else if (!std::strcmp(key, "base_margin")) {
     auto& base_margin = base_margin_.HostVector();
     base_margin.resize(num);
     DISPATCH_CONST_PTR(dtype, dptr, cast_dptr,
                        std::copy(cast_dptr, cast_dptr + num, base_margin.begin()));
   } else if (!std::strcmp(key, "group")) {
-    group_ptr_.resize(num + 1);
+    group_ptr_.clear(); group_ptr_.resize(num + 1, 0);
     DISPATCH_CONST_PTR(dtype, dptr, cast_dptr,
                        std::copy(cast_dptr, cast_dptr + num, group_ptr_.begin() + 1));
     group_ptr_[0] = 0;
     for (size_t i = 1; i < group_ptr_.size(); ++i) {
       group_ptr_[i] = group_ptr_[i - 1] + group_ptr_[i];
     }
+  } else if (!std::strcmp(key, "qid")) {
+    std::vector<uint32_t> query_ids(num, 0);
+    DISPATCH_CONST_PTR(dtype, dptr, cast_dptr,
+                       std::copy(cast_dptr, cast_dptr + num, query_ids.begin()));
+    bool non_dec = true;
+    for (size_t i = 1; i < query_ids.size(); ++i) {
+      if (query_ids[i] < query_ids[i-1]) {
+        non_dec = false;
+        break;
+      }
+    }
+    CHECK(non_dec) << "`qid` must be sorted in non-decreasing order along with data.";
+    group_ptr_.clear(); group_ptr_.push_back(0);
+    for (size_t i = 1; i < query_ids.size(); ++i) {
+      if (query_ids[i] != query_ids[i-1]) {
+        group_ptr_.push_back(i);
+      }
+    }
+    group_ptr_.push_back(query_ids.size());
   } else if (!std::strcmp(key, "label_lower_bound")) {
     auto& labels = labels_lower_bound_.HostVector();
     labels.resize(num);
@@ -710,8 +739,7 @@ DMatrix* DMatrix::Load(const std::string& uri,
   /* sync up number of features after matrix loaded.
    * partitioned data will fail the train/val validation check
    * since partitioned data not knowing the real number of features. */
-  rabit::Allreduce<rabit::op::Max>(&dmat->Info().num_col_, 1, nullptr,
-    nullptr, fname.c_str());
+  rabit::Allreduce<rabit::op::Max>(&dmat->Info().num_col_, 1);
   // backward compatiblity code.
   if (!load_row_split) {
     MetaInfo& info = dmat->Info();
@@ -785,6 +813,9 @@ template DMatrix* DMatrix::Create<data::DataTableAdapter>(
 template DMatrix* DMatrix::Create<data::FileAdapter>(
     data::FileAdapter* adapter, float missing, int nthread,
     const std::string& cache_prefix, size_t page_size);
+template DMatrix* DMatrix::Create<data::CSRArrayAdapter>(
+    data::CSRArrayAdapter* adapter, float missing, int nthread,
+    const std::string& cache_prefix, size_t page_size);
 template DMatrix *
 DMatrix::Create(data::IteratorAdapter<DataIterHandle, XGBCallbackDataIterNext,
                                       XGBoostBatchCSR> *adapter,
@@ -798,19 +829,20 @@ SparsePage SparsePage::GetTranspose(int num_columns) const {
   const int nthread = omp_get_max_threads();
   builder.InitBudget(num_columns, nthread);
   long batch_size = static_cast<long>(this->Size());  // NOLINT(*)
-#pragma omp parallel for default(none) shared(batch_size, builder) schedule(static)
+    auto page = this->GetView();
+#pragma omp parallel for default(none) shared(batch_size, builder, page) schedule(static)
   for (long i = 0; i < batch_size; ++i) {  // NOLINT(*)
     int tid = omp_get_thread_num();
-    auto inst = (*this)[i];
+    auto inst = page[i];
     for (const auto& entry : inst) {
       builder.AddBudget(entry.index, tid);
     }
   }
   builder.InitStorage();
-#pragma omp parallel for default(none) shared(batch_size, builder) schedule(static)
+#pragma omp parallel for default(none) shared(batch_size, builder, page) schedule(static)
   for (long i = 0; i < batch_size; ++i) {  // NOLINT(*)
     int tid = omp_get_thread_num();
-    auto inst = (*this)[i];
+    auto inst = page[i];
     for (const auto& entry : inst) {
       builder.Push(
           entry.index,
@@ -827,9 +859,10 @@ void SparsePage::Push(const SparsePage &batch) {
   const auto& batch_data_vec = batch.data.HostVector();
   size_t top = offset_vec.back();
   data_vec.resize(top + batch.data.Size());
-  std::memcpy(dmlc::BeginPtr(data_vec) + top,
-              dmlc::BeginPtr(batch_data_vec),
-              sizeof(Entry) * batch.data.Size());
+  if (dmlc::BeginPtr(data_vec) && dmlc::BeginPtr(batch_data_vec)) {
+    std::memcpy(dmlc::BeginPtr(data_vec) + top, dmlc::BeginPtr(batch_data_vec),
+                sizeof(Entry) * batch.data.Size());
+  }
   size_t begin = offset.Size();
   offset_vec.resize(begin + batch.Size());
   std::transform(std::next(batch_offset_vec.begin()), batch_offset_vec.end(), &offset_vec[begin],
@@ -839,10 +872,7 @@ void SparsePage::Push(const SparsePage &batch) {
 template <typename AdapterBatchT>
 uint64_t SparsePage::Push(const AdapterBatchT& batch, float missing, int nthread) {
   // Set number of threads but keep old value so we can reset it after
-  const int nthreadmax = omp_get_max_threads();
-  if (nthread <= 0) nthread = nthreadmax;
-  const int nthread_original = omp_get_max_threads();
-  omp_set_num_threads(nthread);
+  int nthread_original = common::OmpSetNumThreadsWithoutHT(&nthread);
   auto& offset_vec = offset.HostVector();
   auto& data_vec = data.HostVector();
 
@@ -861,7 +891,7 @@ uint64_t SparsePage::Push(const AdapterBatchT& batch, float missing, int nthread
     }
   }
   size_t batch_size = batch.Size();
-  const size_t thread_size = batch_size/nthread;
+  const size_t thread_size = batch_size / nthread;
   builder.InitBudget(expected_rows+1, nthread);
   uint64_t max_columns = 0;
   if (batch_size == 0) {

@@ -335,8 +335,8 @@ test_that("xgb.model.dt.tree and xgb.importance work with a single split model",
 })
 
 test_that("xgb.plot.tree works with and without feature names", {
-  xgb.plot.tree(feature_names = feature.names, model = bst.Tree)
-  xgb.plot.tree(model = bst.Tree)
+  expect_silent(xgb.plot.tree(feature_names = feature.names, model = bst.Tree))
+  expect_silent(xgb.plot.tree(model = bst.Tree))
 })
 
 test_that("xgb.plot.multi.trees works with and without feature names", {
@@ -390,8 +390,8 @@ test_that("xgb.plot.shap works", {
 })
 
 test_that("xgb.plot.shap.summary works", {
-  xgb.plot.shap.summary(data = sparse_matrix, model = bst.Tree, top_n = 2)
-  xgb.ggplot.shap.summary(data = sparse_matrix, model = bst.Tree, top_n = 2)
+  expect_silent(xgb.plot.shap.summary(data = sparse_matrix, model = bst.Tree, top_n = 2))
+  expect_silent(xgb.ggplot.shap.summary(data = sparse_matrix, model = bst.Tree, top_n = 2))
 })
 
 test_that("check.deprecation works", {
@@ -409,4 +409,27 @@ test_that("check.deprecation works", {
     res <- ttt(a = 1, dumm = 22, z = 3)
   , "\'dumm\' was partially matched to \'dummy\'")
   expect_equal(res, list(a = 1, DUMMY = 22))
+})
+
+test_that('convert.labels works', {
+  y <- c(0, 1, 0, 0, 1)
+  for (objective in c('binary:logistic', 'binary:logitraw', 'binary:hinge')) {
+    res <- xgboost:::convert.labels(y, objective_name = objective)
+    expect_s3_class(res, 'factor')
+    expect_equal(res, factor(res))
+  }
+  y <- c(0, 1, 3, 2, 1, 4)
+  for (objective in c('multi:softmax', 'multi:softprob', 'rank:pairwise', 'rank:ndcg',
+                      'rank:map')) {
+    res <- xgboost:::convert.labels(y, objective_name = objective)
+    expect_s3_class(res, 'factor')
+    expect_equal(res, factor(res))
+  }
+  y <- c(1.2, 3.0, -1.0, 10.0)
+  for (objective in c('reg:squarederror', 'reg:squaredlogerror', 'reg:logistic',
+                      'reg:pseudohubererror', 'count:poisson', 'survival:cox', 'survival:aft',
+                      'reg:gamma', 'reg:tweedie')) {
+    res <- xgboost:::convert.labels(y, objective_name = objective)
+    expect_equal(class(res), 'numeric')
+  }
 })

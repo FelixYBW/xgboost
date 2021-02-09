@@ -168,6 +168,18 @@ struct EvalRowMAE {
   }
 };
 
+struct EvalRowMAPE {
+  const char *Name() const {
+    return "mape";
+  }
+  XGBOOST_DEVICE bst_float EvalRow(bst_float label, bst_float pred) const {
+    return std::abs((label - pred) / label);
+  }
+  static bst_float GetFinal(bst_float esum, bst_float wsum) {
+    return wsum == 0 ? esum : esum / wsum;
+  }
+};
+
 struct EvalRowLogLoss {
   const char *Name() const {
     return "logloss";
@@ -279,6 +291,8 @@ struct EvalGammaNLogLik {
   }
 
   XGBOOST_DEVICE bst_float EvalRow(bst_float y, bst_float py) const {
+    const bst_float eps = 1e-16f;
+    if (y < eps) y = eps;
     bst_float psi = 1.0;
     bst_float theta = -1. / py;
     bst_float a = psi;
@@ -368,6 +382,10 @@ XGBOOST_REGISTER_METRIC(RMSLE, "rmsle")
 XGBOOST_REGISTER_METRIC(MAE, "mae")
 .describe("Mean absolute error.")
 .set_body([](const char* param) { return new EvalEWiseBase<EvalRowMAE>(); });
+
+XGBOOST_REGISTER_METRIC(MAPE, "mape")
+    .describe("Mean absolute percentage error.")
+    .set_body([](const char* param) { return new EvalEWiseBase<EvalRowMAPE>(); });
 
 XGBOOST_REGISTER_METRIC(MPHE, "mphe")
 .describe("Mean Pseudo Huber error.")

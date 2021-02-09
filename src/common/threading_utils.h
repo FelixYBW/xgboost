@@ -109,7 +109,7 @@ class BlockedSpace2d {
 
 
 // Wrapper to implement nested parallelism with simple omp parallel for
-template<typename Func>
+template <typename Func>
 void ParallelFor2d(const BlockedSpace2d& space, int nthreads, Func func) {
   const size_t num_blocks_in_space = space.Size();
   nthreads = std::min(nthreads, omp_get_max_threads());
@@ -118,7 +118,8 @@ void ParallelFor2d(const BlockedSpace2d& space, int nthreads, Func func) {
   dmlc::OMPException omp_exc;
 #pragma omp parallel num_threads(nthreads)
   {
-    omp_exc.Run([&]() {
+    omp_exc.Run(
+        [](size_t num_blocks_in_space, const BlockedSpace2d& space, int nthreads, Func func) {
       size_t tid = omp_get_thread_num();
       size_t chunck_size =
           num_blocks_in_space / nthreads + !!(num_blocks_in_space % nthreads);
@@ -128,7 +129,7 @@ void ParallelFor2d(const BlockedSpace2d& space, int nthreads, Func func) {
       for (auto i = begin; i < end; i++) {
         func(space.GetFirstDimension(i), space.GetRange(i));
       }
-    });
+    }, num_blocks_in_space, space, nthreads, func);
   }
   omp_exc.Rethrow();
 }
@@ -141,6 +142,32 @@ void ParallelFor(size_t size, size_t nthreads, Func fn) {
     omp_exc.Run(fn, i);
   }
   omp_exc.Rethrow();
+}
+
+/* \brief Configure parallel threads.
+ *
+ * \param p_threads Number of threads, when it's less than or equal to 0, this function
+ *        will change it to number of process on system.
+ *
+ * \return Global openmp max threads before configuration.
+ */
+inline int32_t OmpSetNumThreads(int32_t* p_threads) {
+  auto& threads = *p_threads;
+  int32_t nthread_original = omp_get_max_threads();
+  if (threads <= 0) {
+    threads = omp_get_num_procs();
+  }
+  omp_set_num_threads(threads);
+  return nthread_original;
+}
+inline int32_t OmpSetNumThreadsWithoutHT(int32_t* p_threads) {
+  auto& threads = *p_threads;
+  int32_t nthread_original = omp_get_max_threads();
+  if (threads <= 0) {
+    threads = nthread_original;
+  }
+  omp_set_num_threads(threads);
+  return nthread_original;
 }
 
 }  // namespace common

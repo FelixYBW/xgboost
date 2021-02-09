@@ -1,5 +1,5 @@
 /*!
- * Copyright 2019 by XGBoost Contributors
+ * Copyright 2019-2021 by XGBoost Contributors
  *
  * \file data.cu
  * \brief Handles setting metainfo from array interface.
@@ -34,22 +34,26 @@ void CopyInfoImpl(ArrayInterface column, HostDeviceVector<float>* out) {
   });
 }
 
+namespace {
+auto SetDeviceToPtr(void *ptr) {
+  cudaPointerAttributes attr;
+  dh::safe_cuda(cudaPointerGetAttributes(&attr, ptr));
+  int32_t ptr_device = attr.device;
+  dh::safe_cuda(cudaSetDevice(ptr_device));
+  return ptr_device;
+}
+}  // anonymous namespace
+
 void CopyGroupInfoImpl(ArrayInterface column, std::vector<bst_group_t>* out) {
-  CHECK(column.type[1] == 'i' || column.type[1] == 'u')
-      << "Expected integer metainfo";
-  auto SetDeviceToPtr = [](void* ptr) {
-    cudaPointerAttributes attr;
-    dh::safe_cuda(cudaPointerGetAttributes(&attr, ptr));
-    int32_t ptr_device = attr.device;
-    dh::safe_cuda(cudaSetDevice(ptr_device));
-    return ptr_device;
-  };
+  CHECK(column.type != ArrayInterface::kF4 && column.type != ArrayInterface::kF8)
+      << "Expected integer for group info.";
+
   auto ptr_device = SetDeviceToPtr(column.data);
   dh::TemporaryArray<bst_group_t> temp(column.num_rows);
   auto d_tmp = temp.data();
 
   dh::LaunchN(ptr_device, column.num_rows, [=] __device__(size_t idx) {
-    d_tmp[idx] = column.GetElement(idx);
+    d_tmp[idx] = column.GetElement<size_t>(idx);
   });
   auto length = column.num_rows;
   out->resize(length + 1);
@@ -86,10 +90,55 @@ void MetaInfo::SetInfo(const char * c_key, std::string const& interface_str) {
     CopyInfoImpl(array_interface, &labels_);
   } else if (key == "weight") {
     CopyInfoImpl(array_interface, &weights_);
+    auto ptr = weights_.ConstDevicePointer();
+    auto valid =
+        thrust::all_of(thrust::device, ptr, ptr + weights_.Size(), AllOfOp{});
+    CHECK(valid) << "Weights must be positive values.";
   } else if (key == "base_margin") {
     CopyInfoImpl(array_interface, &base_margin_);
   } else if (key == "group") {
     CopyGroupInfoImpl(array_interface, &group_ptr_);
+    return;
+  } else if (key == "qid") {
+    auto it = dh::MakeTransformIterator<uint32_t>(
+        thrust::make_counting_iterator(0ul),
+        [array_interface] __device__(size_t i) {
+          return array_interface.GetElement<uint32_t>(i);
+        });
+    dh::caching_device_vector<bool> flag(1);
+    auto d_flag = dh::ToSpan(flag);
+    auto d = SetDeviceToPtr(array_interface.data);
+    dh::LaunchN(d, 1, [=] __device__(size_t) { d_flag[0] = true; });
+    dh::LaunchN(d, array_interface.num_rows - 1, [=] __device__(size_t i) {
+      if (array_interface.GetElement<uint32_t>(i) >
+          array_interface.GetElement<uint32_t>(i + 1)) {
+        d_flag[0] = false;
+      }
+    });
+    bool non_dec = true;
+    dh::safe_cuda(cudaMemcpy(&non_dec, flag.data().get(), sizeof(bool),
+                             cudaMemcpyDeviceToHost));
+    CHECK(non_dec)
+        << "`qid` must be sorted in increasing order along with data.";
+    size_t bytes = 0;
+    dh::caching_device_vector<uint32_t> out(array_interface.num_rows);
+    dh::caching_device_vector<uint32_t> cnt(array_interface.num_rows);
+    HostDeviceVector<int> d_num_runs_out(1, 0, d);
+    cub::DeviceRunLengthEncode::Encode(nullptr, bytes, it, out.begin(),
+                                       cnt.begin(), d_num_runs_out.DevicePointer(),
+                                       array_interface.num_rows);
+    dh::caching_device_vector<char> tmp(bytes);
+    cub::DeviceRunLengthEncode::Encode(tmp.data().get(), bytes, it, out.begin(),
+                                       cnt.begin(), d_num_runs_out.DevicePointer(),
+                                       array_interface.num_rows);
+
+    auto h_num_runs_out = d_num_runs_out.HostSpan()[0];
+    group_ptr_.clear(); group_ptr_.resize(h_num_runs_out + 1, 0);
+    dh::XGBCachingDeviceAllocator<char> alloc;
+    thrust::inclusive_scan(thrust::cuda::par(alloc), cnt.begin(),
+                           cnt.begin() + h_num_runs_out, cnt.begin());
+    thrust::copy(cnt.begin(), cnt.begin() + h_num_runs_out,
+                 group_ptr_.begin() + 1);
     return;
   } else if (key == "label_lower_bound") {
     CopyInfoImpl(array_interface, &labels_lower_bound_);
@@ -100,10 +149,9 @@ void MetaInfo::SetInfo(const char * c_key, std::string const& interface_str) {
   } else if (key == "feature_weights") {
     CopyInfoImpl(array_interface, &feature_weigths);
     auto d_feature_weights = feature_weigths.ConstDeviceSpan();
-    auto valid =
-        thrust::all_of(thrust::device, d_feature_weights.data(),
-                       d_feature_weights.data() + d_feature_weights.size(),
-                       AllOfOp{});
+    auto valid = thrust::all_of(
+        thrust::device, d_feature_weights.data(),
+        d_feature_weights.data() + d_feature_weights.size(), AllOfOp{});
     CHECK(valid) << "Feature weight must be greater than 0.";
     return;
   } else {

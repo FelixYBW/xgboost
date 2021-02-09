@@ -40,7 +40,7 @@ class QuantileHistMock : public QuantileHistMaker {
                       DMatrix* p_fmat,
                       const RegTree& tree) {
       RealImpl::InitData(gmat, gpair, *p_fmat, tree);
-      ASSERT_EQ(this->data_layout_, RealImpl::kSparseData);
+      ASSERT_EQ(this->data_layout_, RealImpl::DataLayout::kSparseData);
 
       /* The creation of HistCutMatrix and GHistIndexMatrix are not technically
        * part of QuantileHist updater logic, but we include it here because
@@ -72,12 +72,13 @@ class QuantileHistMock : public QuantileHistMaker {
       ASSERT_LT(*std::max_element(gmat.index.begin(), gmat.index.end()),
                 gmat.cut.Ptrs().back());
       for (const auto& batch : p_fmat->GetBatches<xgboost::SparsePage>()) {
+        auto page = batch.GetView();
         for (size_t i = 0; i < batch.Size(); ++i) {
           const size_t rid = batch.base_rowid + i;
           ASSERT_LT(rid, num_row);
           const size_t gmat_row_offset = gmat.row_ptr[rid];
           ASSERT_LT(gmat_row_offset, gmat.index.Size());
-          SparsePage::Inst inst = batch[i];
+          SparsePage::Inst inst = page[i];
           ASSERT_EQ(gmat.row_ptr[rid] + inst.size(), gmat.row_ptr[rid + 1]);
           for (size_t j = 0; j < inst.size(); ++j) {
             // Each entry of GHistIndexMatrix represents a bin ID
@@ -274,6 +275,7 @@ class QuantileHistMock : public QuantileHistMaker {
       RealImpl::InitData(gmat, gpair, fmat, tree);
       GHistIndexBlockMatrix dummy;
       this->hist_.AddHistRow(nid);
+      this->hist_.AllocateAllData();
       this->BuildHist(gpair, this->row_set_collection_[nid],
                 gmat, dummy, this->hist_[nid]);
 
@@ -315,7 +317,7 @@ class QuantileHistMock : public QuantileHistMaker {
 
       RealImpl::InitData(gmat, row_gpairs, *dmat, tree);
       this->hist_.AddHistRow(0);
-
+      this->hist_.AllocateAllData();
       this->BuildHist(row_gpairs, this->row_set_collection_[0],
                       gmat, quantile_index_block, this->hist_[0]);
 
@@ -411,7 +413,7 @@ class QuantileHistMock : public QuantileHistMaker {
         cm.Init(gmat, 0.0);
         RealImpl::InitData(gmat, row_gpairs, *dmat, tree);
         this->hist_.AddHistRow(0);
-
+        this->hist_.AllocateAllData();
         RealImpl::InitNewNode(0, gmat, row_gpairs, *dmat, tree);
 
         const size_t num_row = dmat->Info().num_row_;
@@ -449,6 +451,8 @@ class QuantileHistMock : public QuantileHistMaker {
           RealImpl::partition_builder_.Init(1, 1, [&](size_t node_in_set) {
             return 1;
           });
+          const size_t task_id = RealImpl::partition_builder_.GetTaskIdx(0, 0);
+          RealImpl::partition_builder_.AllocateForTask(task_id);
           this->template PartitionKernel<uint8_t>(0, 0, common::Range1d(0, kNRows),
                                                   split, cm, tree);
           RealImpl::partition_builder_.CalculateRowOffsets();

@@ -103,7 +103,7 @@ struct LogisticRegressionOneAPI {
 
 // logistic loss for binary classification task
 struct LogisticClassificationOneAPI : public LogisticRegressionOneAPI {
-  static const char* DefaultEvalMetric() { return "error"; }
+  static const char* DefaultEvalMetric() { return "logloss"; }
   static const char* Name() { return "binary:logistic_oneapi"; }
 };
 
@@ -134,7 +134,7 @@ struct LogisticRawOneAPI : public LogisticRegressionOneAPI {
     predt = SigmoidOneAPI(predt);
     return std::max(predt * (T(1.0f) - predt), eps);
   }
-  static const char* DefaultEvalMetric() { return "auc"; }
+  static const char* DefaultEvalMetric() { return "logloss"; }
 
   static const char* Name() { return "binary:logitraw_oneapi"; }
 };

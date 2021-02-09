@@ -10,6 +10,8 @@
 #include "../helpers.h"
 #include "../../../src/common/io.h"
 
+#include "../../../src/c_api/c_api_error.h"
+
 TEST(CAPI, XGDMatrixCreateFromMatDT) {
   std::vector<int> col0 = {0, -1, 3};
   std::vector<float> col1 = {-4.0f, 2.0f, 0.0f};
@@ -28,10 +30,11 @@ TEST(CAPI, XGDMatrixCreateFromMatDT) {
   ASSERT_EQ(info.num_nonzero_, 6ul);
 
   for (const auto &batch : (*dmat)->GetBatches<xgboost::SparsePage>()) {
-    ASSERT_EQ(batch[0][0].fvalue, 0.0f);
-    ASSERT_EQ(batch[0][1].fvalue, -4.0f);
-    ASSERT_EQ(batch[2][0].fvalue, 3.0f);
-    ASSERT_EQ(batch[2][1].fvalue, 0.0f);
+    auto page = batch.GetView();
+    ASSERT_EQ(page[0][0].fvalue, 0.0f);
+    ASSERT_EQ(page[0][1].fvalue, -4.0f);
+    ASSERT_EQ(page[2][0].fvalue, 3.0f);
+    ASSERT_EQ(page[2][1].fvalue, 0.0f);
   }
 
   delete dmat;
@@ -60,8 +63,9 @@ TEST(CAPI, XGDMatrixCreateFromMatOmp) {
     ASSERT_EQ(info.num_nonzero_, num_cols * row - num_missing);
 
     for (const auto &batch : (*dmat)->GetBatches<xgboost::SparsePage>()) {
+      auto page = batch.GetView();
       for (size_t i = 0; i < batch.Size(); i++) {
-        auto inst = batch[i];
+        auto inst = page[i];
         for (auto e : inst) {
           ASSERT_EQ(e.fvalue, 1.5);
         }
@@ -196,4 +200,64 @@ TEST(CAPI, DMatrixSetFeatureName) {
 
   XGDMatrixFree(handle);
 }
+
+int TestExceptionCatching() {
+  API_BEGIN();
+  throw std::bad_alloc();
+  API_END();
+}
+
+TEST(CAPI, Exception) {
+  ASSERT_NO_THROW({TestExceptionCatching();});
+  ASSERT_EQ(TestExceptionCatching(), -1);
+  auto error = XGBGetLastError();
+  // Not null
+  ASSERT_TRUE(error);
+}
+
+TEST(CAPI, XGBGlobalConfig) {
+  int ret;
+  {
+    const char *config_str = R"json(
+    {
+      "verbosity": 0
+    }
+  )json";
+    ret = XGBSetGlobalConfig(config_str);
+    ASSERT_EQ(ret, 0);
+    const char *updated_config_cstr;
+    ret = XGBGetGlobalConfig(&updated_config_cstr);
+    ASSERT_EQ(ret, 0);
+
+    std::string updated_config_str{updated_config_cstr};
+    auto updated_config =
+        Json::Load({updated_config_str.data(), updated_config_str.size()});
+    ASSERT_EQ(get<Integer>(updated_config["verbosity"]), 0);
+  }
+  {
+    const char *config_str = R"json(
+    {
+      "foo": 0
+    }
+  )json";
+    ret = XGBSetGlobalConfig(config_str);
+    ASSERT_EQ(ret , -1);
+    auto err = std::string{XGBGetLastError()};
+    ASSERT_NE(err.find("foo"), std::string::npos);
+  }
+  {
+    const char *config_str = R"json(
+    {
+      "foo": 0,
+      "verbosity": 0
+    }
+  )json";
+    ret = XGBSetGlobalConfig(config_str);
+    ASSERT_EQ(ret , -1);
+    auto err = std::string{XGBGetLastError()};
+    ASSERT_NE(err.find("foo"), std::string::npos);
+    ASSERT_EQ(err.find("verbosity"), std::string::npos);
+  }
+}
+
 }  // namespace xgboost

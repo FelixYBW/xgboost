@@ -17,6 +17,7 @@
 #include "helpers.h"
 #include "xgboost/c_api.h"
 #include "../../src/data/adapter.h"
+#include "../../src/data/simple_dmatrix.h"
 #include "../../src/gbm/gbtree_model.h"
 #include "xgboost/predictor.h"
 
@@ -189,24 +190,7 @@ void RandomDataGenerator::GenerateDense(HostDeviceVector<float> *out) const {
 Json RandomDataGenerator::ArrayInterfaceImpl(HostDeviceVector<float> *storage,
                                              size_t rows, size_t cols) const {
   this->GenerateDense(storage);
-  Json array_interface {Object()};
-  array_interface["data"] = std::vector<Json>(2);
-  if (storage->DeviceCanRead()) {
-    array_interface["data"][0] =
-        Integer(reinterpret_cast<int64_t>(storage->ConstDevicePointer()));
-  } else {
-    array_interface["data"][0] =
-        Integer(reinterpret_cast<int64_t>(storage->ConstHostPointer()));
-  }
-  array_interface["data"][1] = Boolean(false);
-
-  array_interface["shape"] = std::vector<Json>(2);
-  array_interface["shape"][0] = rows;
-  array_interface["shape"][1] = cols;
-
-  array_interface["typestr"] = String("<f4");
-  array_interface["version"] = 1;
-  return array_interface;
+  return GetArrayInterface(storage, rows, cols);
 }
 
 std::string RandomDataGenerator::GenerateArrayInterface(
@@ -347,7 +331,21 @@ RandomDataGenerator::GenerateDMatrix(bool with_label, bool float_label,
       gen.GenerateDense(&out->Info().labels_);
     }
   }
+  if (device_ >= 0) {
+    out->Info().labels_.SetDevice(device_);
+    for (auto const& page : out->GetBatches<SparsePage>()) {
+      page.data.SetDevice(device_);
+      page.offset.SetDevice(device_);
+    }
+  }
   return out;
+}
+
+std::shared_ptr<DMatrix>
+GetDMatrixFromData(const std::vector<float> &x, int num_rows, int num_columns){
+  data::DenseAdapter adapter(x.data(), num_rows, num_columns);
+  return std::shared_ptr<DMatrix>(new data::SimpleDMatrix(
+      &adapter, std::numeric_limits<float>::quiet_NaN(), 1));
 }
 
 std::unique_ptr<DMatrix> CreateSparsePageDMatrix(
@@ -365,12 +363,8 @@ std::unique_ptr<DMatrix> CreateSparsePageDMatrix(
     batch_count++;
     row_count += batch.Size();
   }
-#if defined(_OPENMP)
   EXPECT_GE(batch_count, 2);
   EXPECT_EQ(row_count, dmat->Info().num_row_);
-#else
-#warning "External memory doesn't work with Non-OpenMP build "
-#endif  // defined(_OPENMP)
   return dmat;
 }
 
@@ -487,6 +481,36 @@ std::unique_ptr<GradientBooster> CreateTrainedGBM(
   return gbm;
 }
 
+void DMatrixToCSR(DMatrix *dmat, std::vector<float> *p_data,
+                  std::vector<size_t> *p_row_ptr,
+                  std::vector<bst_feature_t> *p_cids) {
+  auto &data = *p_data;
+  auto &row_ptr = *p_row_ptr;
+  auto &cids = *p_cids;
+
+  data.resize(dmat->Info().num_nonzero_);
+  cids.resize(data.size());
+  row_ptr.resize(dmat->Info().num_row_ + 1);
+  SparsePage page;
+  for (const auto &batch : dmat->GetBatches<SparsePage>()) {
+    page.Push(batch);
+  }
+
+  auto const& in_offset = page.offset.HostVector();
+  auto const& in_data = page.data.HostVector();
+
+  CHECK_EQ(in_offset.size(), row_ptr.size());
+  std::copy(in_offset.cbegin(), in_offset.cend(), row_ptr.begin());
+  ASSERT_EQ(in_data.size(), data.size());
+  std::transform(in_data.cbegin(), in_data.cend(), data.begin(), [](Entry const& e) {
+    return e.fvalue;
+  });
+  ASSERT_EQ(in_data.size(), cids.size());
+  std::transform(in_data.cbegin(), in_data.cend(), cids.begin(), [](Entry const& e) {
+    return e.index;
+  });
+}
+
 #if defined(XGBOOST_USE_RMM) && XGBOOST_USE_RMM == 1
 
 using CUDAMemoryResource = rmm::mr::cuda_memory_resource;
@@ -539,5 +563,4 @@ RMMAllocatorPtr SetUpRMMResourceForCppTests(int argc, char** argv) {
   return RMMAllocatorPtr(nullptr, DeleteRMMResource);
 }
 #endif  // !defined(XGBOOST_USE_RMM) || XGBOOST_USE_RMM != 1
-
 }  // namespace xgboost

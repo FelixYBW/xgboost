@@ -52,8 +52,7 @@ class RegLossObj : public ObjFunction {
   }
 
   void GetGradient(const HostDeviceVector<bst_float>& preds,
-                   const MetaInfo &info,
-                   int iter,
+                   const MetaInfo &info, int,
                    HostDeviceVector<GradientPair>* out_gpair) override {
     CHECK_EQ(preds.Size(), info.labels_.Size())
         << " " << "labels are not correctly provided"
@@ -114,7 +113,7 @@ class RegLossObj : public ObjFunction {
         [] XGBOOST_DEVICE(size_t _idx, common::Span<float> _preds) {
           _preds[_idx] = Loss::PredTransform(_preds[_idx]);
         }, common::Range{0, static_cast<int64_t>(io_preds->Size())},
-        tparam_->gpu_id)
+        io_preds->DeviceIdx())
         .Eval(io_preds);
   }
 
@@ -191,8 +190,7 @@ class PoissonRegression : public ObjFunction {
   }
 
   void GetGradient(const HostDeviceVector<bst_float>& preds,
-                   const MetaInfo &info,
-                   int iter,
+                   const MetaInfo &info, int,
                    HostDeviceVector<GradientPair> *out_gpair) override {
     CHECK_NE(info.labels_.Size(), 0U) << "label set cannot be empty";
     CHECK_EQ(preds.Size(), info.labels_.Size()) << "labels are not correctly provided";
@@ -240,7 +238,7 @@ class PoissonRegression : public ObjFunction {
           _preds[_idx] = expf(_preds[_idx]);
         },
         common::Range{0, static_cast<int64_t>(io_preds->Size())},
-        tparam_->gpu_id)
+        io_preds->DeviceIdx())
         .Eval(io_preds);
   }
   void EvalTransform(HostDeviceVector<bst_float> *io_preds) override {
@@ -280,11 +278,10 @@ XGBOOST_REGISTER_OBJECTIVE(PoissonRegression, "count:poisson")
 class CoxRegression : public ObjFunction {
  public:
   void Configure(
-      const std::vector<std::pair<std::string, std::string> > &args) override {}
+      const std::vector<std::pair<std::string, std::string> >&) override {}
 
   void GetGradient(const HostDeviceVector<bst_float>& preds,
-                   const MetaInfo &info,
-                   int iter,
+                   const MetaInfo &info, int,
                    HostDeviceVector<GradientPair> *out_gpair) override {
     CHECK_NE(info.labels_.Size(), 0U) << "label set cannot be empty";
     CHECK_EQ(preds.Size(), info.labels_.Size()) << "labels are not correctly provided";
@@ -379,11 +376,10 @@ XGBOOST_REGISTER_OBJECTIVE(CoxRegression, "survival:cox")
 class GammaRegression : public ObjFunction {
  public:
   void Configure(
-      const std::vector<std::pair<std::string, std::string> > &args) override {}
+      const std::vector<std::pair<std::string, std::string> >&) override {}
 
   void GetGradient(const HostDeviceVector<bst_float> &preds,
-                   const MetaInfo &info,
-                   int iter,
+                   const MetaInfo &info, int,
                    HostDeviceVector<GradientPair> *out_gpair) override {
     CHECK_NE(info.labels_.Size(), 0U) << "label set cannot be empty";
     CHECK_EQ(preds.Size(), info.labels_.Size()) << "labels are not correctly provided";
@@ -430,7 +426,7 @@ class GammaRegression : public ObjFunction {
           _preds[_idx] = expf(_preds[_idx]);
         },
         common::Range{0, static_cast<int64_t>(io_preds->Size())},
-        tparam_->gpu_id)
+        io_preds->DeviceIdx())
         .Eval(io_preds);
   }
   void EvalTransform(HostDeviceVector<bst_float> *io_preds) override {
@@ -479,8 +475,7 @@ class TweedieRegression : public ObjFunction {
   }
 
   void GetGradient(const HostDeviceVector<bst_float>& preds,
-                   const MetaInfo &info,
-                   int iter,
+                   const MetaInfo &info, int,
                    HostDeviceVector<GradientPair> *out_gpair) override {
     CHECK_NE(info.labels_.Size(), 0U) << "label set cannot be empty";
     CHECK_EQ(preds.Size(), info.labels_.Size()) << "labels are not correctly provided";
@@ -534,7 +529,7 @@ class TweedieRegression : public ObjFunction {
           _preds[_idx] = expf(_preds[_idx]);
         },
         common::Range{0, static_cast<int64_t>(io_preds->Size())},
-        tparam_->gpu_id)
+        io_preds->DeviceIdx())
         .Eval(io_preds);
   }
 
