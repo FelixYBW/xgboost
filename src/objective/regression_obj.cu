@@ -19,6 +19,7 @@
 
 #include "../common/transform.h"
 #include "../common/common.h"
+#include "../common/threading_utils.h"
 #include "./regression_loss.h"
 
 
@@ -72,35 +73,95 @@ class RegLossObj : public ObjFunction {
     additional_input_.HostVector().begin()[1] = scale_pos_weight;
     additional_input_.HostVector().begin()[2] = is_null_weight;
 
-    common::Transform<>::Init([] XGBOOST_DEVICE(size_t _idx,
-                           common::Span<float> _additional_input,
-                           common::Span<GradientPair> _out_gpair,
-                           common::Span<const bst_float> _preds,
-                           common::Span<const bst_float> _labels,
-                           common::Span<const bst_float> _weights) {
-          const float _scale_pos_weight = _additional_input[1];
-          const bool _is_null_weight = _additional_input[2];
+const size_t nthreads = omp_get_max_threads();
+const size_t block_size = ndata/nthreads + !!(ndata%nthreads);
+const bst_float* preds_ptr = preds.ConstHostVector().data();
+GradientPair* out_gpair_ptr = out_gpair->HostVector().data();
+const bst_float* labels_ptr = info.labels_.ConstHostVector().data();
+std::vector<std::vector<uint64_t>> threads_checks(nthreads);
+if(is_null_weight) {
+  #pragma omp parallel num_threads(nthreads)
+  {
+    const size_t tid = omp_get_thread_num();
+    threads_checks[tid].resize(1,0);
+    const size_t begin = tid*block_size;
+    const size_t end = std::min(ndata, begin + block_size);
+    for(size_t idx = begin; idx < end; ++idx) {
+      bst_float p = Loss::PredTransform(preds_ptr[idx]);
+      bst_float w = 1;
+      bst_float label = labels_ptr[idx];
+      if (label == 1.0f) {
+        w *= scale_pos_weight;
+      }
+      if (!Loss::CheckLabel(label)) {
+        // If there is an incorrect label, the host code will know.
+        threads_checks[tid][0] = 1;
+      }
+      out_gpair_ptr[idx] = GradientPair(Loss::FirstOrderGradient(p, label) * w,
+                                              Loss::SecondOrderGradient(p, label) * w);
+    }
+  }
 
-          bst_float p = Loss::PredTransform(_preds[_idx]);
-          bst_float w = _is_null_weight ? 1.0f : _weights[_idx];
-          bst_float label = _labels[_idx];
-          if (label == 1.0f) {
-            w *= _scale_pos_weight;
-          }
-          if (!Loss::CheckLabel(label)) {
-            // If there is an incorrect label, the host code will know.
-            _additional_input[0] = 0;
-          }
-          _out_gpair[_idx] = GradientPair(Loss::FirstOrderGradient(p, label) * w,
-                                          Loss::SecondOrderGradient(p, label) * w);
-        },
-        common::Range{0, static_cast<int64_t>(ndata)}, device).Eval(
-            &additional_input_, out_gpair, &preds, &info.labels_, &info.weights_);
-
-    auto const flag = additional_input_.HostVector().begin()[0];
-    if (flag == 0) {
+} else {
+  const bst_float* weights_ptr = info.weights_.ConstHostVector().data();
+  #pragma omp parallel num_threads(nthreads)
+  {
+    const size_t tid = omp_get_thread_num();
+    threads_checks[tid].resize(1,0);
+    const size_t begin = tid*block_size;
+    const size_t end = std::min(ndata, begin + block_size);
+    for(size_t idx = begin; idx < end; ++idx) {
+      bst_float p = Loss::PredTransform(preds_ptr[idx]);
+      bst_float w = weights_ptr[idx];
+      bst_float label = labels_ptr[idx];
+      if (label == 1.0f) {
+        w *= scale_pos_weight;
+      }
+      if (!Loss::CheckLabel(label)) {
+        // If there is an incorrect label, the host code will know.
+        threads_checks[tid][0] = 1;
+      }
+      out_gpair_ptr[idx] = GradientPair(Loss::FirstOrderGradient(p, label) * w,
+                                              Loss::SecondOrderGradient(p, label) * w);
+    }
+  }
+}
+uint64_t check_summ = 0;
+for(size_t tid = 0; tid < nthreads; ++tid) {
+  check_summ += threads_checks[tid][0];
+}
+    if (check_summ != 0) {
       LOG(FATAL) << Loss::LabelErrorMsg();
     }
+    // common::Transform<>::Init([] XGBOOST_DEVICE(size_t _idx,
+    //                        common::Span<float> _additional_input,
+    //                        common::Span<GradientPair> _out_gpair,
+    //                        common::Span<const bst_float> _preds,
+    //                        common::Span<const bst_float> _labels,
+    //                        common::Span<const bst_float> _weights) {
+    //       const float _scale_pos_weight = _additional_input[1];
+    //       const bool _is_null_weight = _additional_input[2];
+
+    //       bst_float p = Loss::PredTransform(_preds[_idx]);
+    //       bst_float w = _is_null_weight ? 1.0f : _weights[_idx];
+    //       bst_float label = _labels[_idx];
+    //       if (label == 1.0f) {
+    //         w *= _scale_pos_weight;
+    //       }
+    //       if (!Loss::CheckLabel(label)) {
+    //         // If there is an incorrect label, the host code will know.
+    //         _additional_input[0] = 0;
+    //       }
+    //       _out_gpair[_idx] = GradientPair(Loss::FirstOrderGradient(p, label) * w,
+    //                                       Loss::SecondOrderGradient(p, label) * w);
+    //     },
+    //     common::Range{0, static_cast<int64_t>(ndata)}, device).Eval(
+    //         &additional_input_, out_gpair, &preds, &info.labels_, &info.weights_);
+
+    // auto const flag = additional_input_.HostVector().begin()[0];
+    // if (flag == 0) {
+    //   LOG(FATAL) << Loss::LabelErrorMsg();
+    // }
   }
 
  public:
@@ -113,7 +174,7 @@ class RegLossObj : public ObjFunction {
         [] XGBOOST_DEVICE(size_t _idx, common::Span<float> _preds) {
           _preds[_idx] = Loss::PredTransform(_preds[_idx]);
         }, common::Range{0, static_cast<int64_t>(io_preds->Size())},
-        tparam_->gpu_id)
+        io_preds->DeviceIdx())
         .Eval(io_preds);
   }
 
@@ -238,7 +299,7 @@ class PoissonRegression : public ObjFunction {
           _preds[_idx] = expf(_preds[_idx]);
         },
         common::Range{0, static_cast<int64_t>(io_preds->Size())},
-        tparam_->gpu_id)
+        io_preds->DeviceIdx())
         .Eval(io_preds);
   }
   void EvalTransform(HostDeviceVector<bst_float> *io_preds) override {
@@ -345,10 +406,9 @@ class CoxRegression : public ObjFunction {
   void PredTransform(HostDeviceVector<bst_float> *io_preds) override {
     std::vector<bst_float> &preds = io_preds->HostVector();
     const long ndata = static_cast<long>(preds.size()); // NOLINT(*)
-#pragma omp parallel for schedule(static)
-    for (long j = 0; j < ndata; ++j) {  // NOLINT(*)
+    common::ParallelFor(ndata, [&](long j) { // NOLINT(*)
       preds[j] = std::exp(preds[j]);
-    }
+    });
   }
   void EvalTransform(HostDeviceVector<bst_float> *io_preds) override {
     PredTransform(io_preds);
@@ -404,7 +464,7 @@ class GammaRegression : public ObjFunction {
           bst_float p = _preds[_idx];
           bst_float w = is_null_weight ? 1.0f : _weights[_idx];
           bst_float y = _labels[_idx];
-          if (y < 0.0f) {
+          if (y <= 0.0f) {
             _label_correct[0] = 0;
           }
           _out_gpair[_idx] = GradientPair((1 - y / expf(p)) * w, y / expf(p) * w);
@@ -416,7 +476,7 @@ class GammaRegression : public ObjFunction {
     std::vector<int>& label_correct_h = label_correct_.HostVector();
     for (auto const flag : label_correct_h) {
       if (flag == 0) {
-        LOG(FATAL) << "GammaRegression: label must be nonnegative";
+        LOG(FATAL) << "GammaRegression: label must be positive.";
       }
     }
   }
@@ -426,7 +486,7 @@ class GammaRegression : public ObjFunction {
           _preds[_idx] = expf(_preds[_idx]);
         },
         common::Range{0, static_cast<int64_t>(io_preds->Size())},
-        tparam_->gpu_id)
+        io_preds->DeviceIdx())
         .Eval(io_preds);
   }
   void EvalTransform(HostDeviceVector<bst_float> *io_preds) override {
@@ -529,7 +589,7 @@ class TweedieRegression : public ObjFunction {
           _preds[_idx] = expf(_preds[_idx]);
         },
         common::Range{0, static_cast<int64_t>(io_preds->Size())},
-        tparam_->gpu_id)
+        io_preds->DeviceIdx())
         .Eval(io_preds);
   }
 
