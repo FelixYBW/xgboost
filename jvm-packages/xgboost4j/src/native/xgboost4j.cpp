@@ -219,6 +219,7 @@ class JRecordBatchReader : public arrow::RecordBatchReader {
       // todo assert length == schema.length
       std::vector<std::shared_ptr<arrow::ArrayData>> columns;
 	    std::vector<std::shared_ptr<arrow::Field>> arrow_fields;
+
       int buffer_index = 0;
       for (int i = 0; i < jenv_->GetArrayLength(fields); i++) {
         jobject field = jenv_->GetObjectArrayElement(fields, i);
@@ -247,7 +248,10 @@ class JRecordBatchReader : public arrow::RecordBatchReader {
         } else if (strcmp(raw_string, "double") == 0){
           arrow_field = std::make_shared<arrow::Field>("v" + std::to_string(i), arrow::float64());
           array_data = arrow::ArrayData::Make(arrow::float64(), num_rows , data);
+        } else {
+          (*env)->ThrowNew(env, (*env)->FindClass(env, "java/lang/Exception"), " data type should be float or double ");
         }
+
 
 		    arrow_fields.push_back(arrow_field);
         columns.push_back(array_data);
@@ -282,16 +286,16 @@ JNIEXPORT jint JNICALL Java_ml_dmlc_xgboost4j_java_XGBoostJNI_XGDMatrixCreateByR
   DMatrixHandle result;
   std::unique_ptr<arrow::RecordBatchReader> jr;
   jr.reset(new JRecordBatchReader(jenv, jiter, width));
-  
+
   std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
   jr->ReadAll(&batches);
-
+  
   std::vector<std::shared_ptr<arrow::Array>> array_vector;
   std::vector<std::shared_ptr<arrow::RecordBatch>> batches_removed;
   
   int num_rows = 0;
   int num_cols = 0;
- 
+  
   for (auto iter = batches.begin(); iter != batches.end(); iter++) {
     std::shared_ptr<arrow::RecordBatch> batch = *iter;
     num_rows += batch->num_rows();
@@ -322,7 +326,7 @@ JNIEXPORT jint JNICALL Java_ml_dmlc_xgboost4j_java_XGBoostJNI_XGDMatrixCreateByR
 
   result = new std::shared_ptr<xgboost::DMatrix>(
         xgboost::DMatrix::Create(&adapter, 0, nthread));
-
+    
   setHandle(jenv, jout, result);
   return 0;
 }
