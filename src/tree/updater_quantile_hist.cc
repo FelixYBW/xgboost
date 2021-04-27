@@ -72,6 +72,9 @@ template<typename GradientSumT>
 void QuantileHistMaker::SetBuilder(std::unique_ptr<Builder<GradientSumT>>* builder,
                                    DMatrix *dmat) {
   const bool is_optimized_branch = (dmat->IsDense() && param_.enable_feature_grouping <= 0 && param_.grow_policy == TrainParam::kDepthWise);
+
+  std::cout << "xgbtck is_optimized_branch= " << is_optimized_branch << " dmat->isdense()= " << dmat->IsDense() << std::endl;
+
   builder->reset(new Builder<GradientSumT>(
                 param_,
                 std::move(pruner_),
