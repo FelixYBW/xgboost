@@ -113,7 +113,6 @@ class TestInplacePredict:
     def setup_class(cls):
         cls.rows = 1000
         cls.cols = 10
-<<<<<<< HEAD
 
         cls.missing = 11            # set to integer for testing
 
@@ -123,17 +122,6 @@ class TestInplacePredict:
         missing_idx = [i for i in range(0, cls.cols, 4)]
         cls.X[:, missing_idx] = cls.missing  # set to be missing
 
-=======
-
-        cls.missing = 11            # set to integer for testing
-
-        cls.rng = np.random.RandomState(1994)
-
-        cls.X = cls.rng.randn(cls.rows, cls.cols)
-        missing_idx = [i for i in range(0, cls.cols, 4)]
-        cls.X[:, missing_idx] = cls.missing  # set to be missing
-
->>>>>>> 8d45f4d291ae695946d1601de933ee9918822524
         cls.y = cls.rng.randn(cls.rows)
 
         dtrain = xgb.DMatrix(cls.X, cls.y)

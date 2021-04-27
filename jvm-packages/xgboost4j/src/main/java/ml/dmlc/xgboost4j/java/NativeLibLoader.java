@@ -38,11 +38,7 @@ class NativeLibLoader {
 
   private static boolean initialized = false;
   private static final String nativeResourcePath = "/lib";
-<<<<<<< HEAD
   private static final String[] libNames = new String[]{"libarrow.so", "libxgboost4j.so"};
-=======
-  private static final String[] libNames = new String[]{"xgboost4j"};
->>>>>>> 8d45f4d291ae695946d1601de933ee9918822524
 
   static synchronized void initXGBoost() throws IOException {
     if (!initialized) {
@@ -50,11 +46,7 @@ class NativeLibLoader {
       for (String libName : libNames) {
         try {
           String libraryPathInJar = nativeResourcePath + "/" +
-<<<<<<< HEAD
               platform + "/" + libName;
-=======
-              platform + "/" + System.mapLibraryName(libName);
->>>>>>> 8d45f4d291ae695946d1601de933ee9918822524
           loadLibraryFromJar(libraryPathInJar);
         } catch (IOException ioe) {
           logger.error("failed to load " + libName + " library from jar for platform " + platform);
@@ -121,7 +113,6 @@ class NativeLibLoader {
    * three characters
    */
   private static void loadLibraryFromJar(String path) throws IOException, IllegalArgumentException {
-<<<<<<< HEAD
 
     File lockFile = new File(System.getProperty("java.io.tmpdir") + "/xgb.lck");
     FileOutputStream outStream = null;
@@ -172,10 +163,6 @@ class NativeLibLoader {
         }
       }
     }
-=======
-    String temp = createTempFileFromResource(path);
-    System.load(temp);
->>>>>>> 8d45f4d291ae695946d1601de933ee9918822524
   }
 
   /**

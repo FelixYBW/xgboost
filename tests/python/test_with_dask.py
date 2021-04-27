@@ -294,104 +294,6 @@ def test_dask_regressor(model: str, client: "Client") -> None:
     regressor.client = client
     regressor.fit(X, y, sample_weight=w, eval_set=[(X, y)])
     prediction = regressor.predict(X)
-<<<<<<< HEAD
-
-    assert prediction.ndim == 1
-    assert prediction.shape[0] == kRows
-
-    history = regressor.evals_result()
-
-    assert isinstance(prediction, da.Array)
-    assert isinstance(history, dict)
-
-    assert list(history['validation_0'].keys())[0] == 'rmse'
-    forest = int(
-        json.loads(regressor.get_booster().save_config())["learner"][
-            "gradient_booster"
-        ]["gbtree_train_param"]["num_parallel_tree"]
-    )
-
-    if model == "boosting":
-        assert len(history['validation_0']['rmse']) == 2
-        assert forest == 1
-    else:
-        assert len(history['validation_0']['rmse']) == 1
-        assert forest == 2
-
-
-def run_dask_classifier(
-    X: xgb.dask._DaskCollection,
-    y: xgb.dask._DaskCollection,
-    w: xgb.dask._DaskCollection,
-    model: str,
-    client: "Client",
-    n_classes,
-) -> None:
-    metric = "merror" if n_classes > 2 else "logloss"
-
-    if model == "boosting":
-        classifier = xgb.dask.DaskXGBClassifier(
-            verbosity=1, n_estimators=2, eval_metric=metric
-        )
-    else:
-        classifier = xgb.dask.DaskXGBRFClassifier(
-            verbosity=1, n_estimators=2, eval_metric=metric
-        )
-
-    assert classifier._estimator_type == "classifier"
-    assert sklearn.base.is_classifier(classifier)
-
-    classifier.client = client
-    classifier.fit(X, y, sample_weight=w, eval_set=[(X, y)])
-    prediction = classifier.predict(X).compute()
-
-    assert prediction.ndim == 1
-    assert prediction.shape[0] == kRows
-
-    history = classifier.evals_result()
-
-    assert isinstance(history, dict)
-
-    assert list(history.keys())[0] == "validation_0"
-    assert list(history["validation_0"].keys())[0] == metric
-    assert len(list(history["validation_0"])) == 1
-    forest = int(
-        json.loads(classifier.get_booster().save_config())["learner"][
-            "gradient_booster"
-        ]["gbtree_train_param"]["num_parallel_tree"]
-    )
-    if model == "boosting":
-        assert len(history["validation_0"][metric]) == 2
-        assert forest == 1
-    else:
-        assert len(history["validation_0"][metric]) == 1
-        assert forest == 2
-
-    # Test .predict_proba()
-    probas = classifier.predict_proba(X).compute()
-    assert classifier.n_classes_ == n_classes
-    assert probas.ndim == 2
-    assert probas.shape[0] == kRows
-    assert probas.shape[1] == n_classes
-
-    if n_classes > 2:
-        cls_booster = classifier.get_booster()
-        single_node_proba = cls_booster.inplace_predict(X.compute())
-
-        # test shared by CPU and GPU
-        if isinstance(single_node_proba, np.ndarray):
-            np.testing.assert_allclose(single_node_proba, probas)
-        else:
-            import cupy
-            cupy.testing.assert_allclose(single_node_proba, probas)
-
-    # Test with dataframe, not shared with GPU as cupy doesn't work well with da.unique.
-    if isinstance(X, da.Array) and n_classes > 2:
-        X_d: dd.DataFrame = X.to_dask_dataframe()
-
-        assert classifier.n_classes_ == n_classes
-        prediction_df = classifier.predict(X_d).compute()
-
 
     assert prediction.ndim == 1
     assert prediction.shape[0] == kRows
@@ -874,7 +776,6 @@ async def generate_concurrent_trainings() -> None:
 
 def test_concurrent_trainings() -> None:
     asyncio.run(generate_concurrent_trainings())
-<<<<<<< HEAD
 
 
 def test_predict(client: "Client") -> None:
@@ -885,22 +786,6 @@ def test_predict(client: "Client") -> None:
     predt_0 = xgb.dask.predict(client, model=booster, data=dtrain)
     assert predt_0.ndim == 1
     assert predt_0.shape[0] == kRows
-
-    margin = xgb.dask.predict(client, model=booster, data=dtrain, output_margin=True)
-    assert margin.ndim == 1
-    assert margin.shape[0] == kRows
-
-    shap = xgb.dask.predict(client, model=booster, data=dtrain, pred_contribs=True)
-    assert shap.ndim == 2
-    assert shap.shape[0] == kRows
-    assert shap.shape[1] == kCols + 1
-
-    booster_f = client.scatter(booster, broadcast=True)
-
-    predt_1 = xgb.dask.predict(client, booster_f, X).compute()
-    predt_2 = xgb.dask.inplace_predict(client, booster_f, X).compute()
-    np.testing.assert_allclose(predt_0, predt_1)
-    np.testing.assert_allclose(predt_0, predt_2)
 
     margin = xgb.dask.predict(client, model=booster, data=dtrain, output_margin=True)
     assert margin.ndim == 1
@@ -1293,32 +1178,6 @@ class TestWithDask:
                                             tree_method='hist')
             reg.fit(X, y, eval_set=[(X, y)])
 
-
-    @pytest.mark.skipif(**tm.no_dask())
-    @pytest.mark.skipif(**tm.no_sklearn())
-    def test_custom_objective(self, client: "Client") -> None:
-        from sklearn.datasets import load_boston
-        X, y = load_boston(return_X_y=True)
-        X, y = da.from_array(X), da.from_array(y)
-        rounds = 20
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = os.path.join(tmpdir, 'log')
-
-            def sqr(
-                labels: np.ndarray, predts: np.ndarray
-            ) -> Tuple[np.ndarray, np.ndarray]:
-                with open(path, 'a') as fd:
-                    print('Running sqr', file=fd)
-                grad = predts - labels
-                hess = np.ones(shape=labels.shape[0])
-                return grad, hess
-
-            reg = xgb.dask.DaskXGBRegressor(n_estimators=rounds, objective=sqr,
-                                            tree_method='hist')
-            reg.fit(X, y, eval_set=[(X, y)])
-
->>>>>>> 8d45f4d291ae695946d1601de933ee9918822524
             # Check the obj is ran for rounds.
             with open(path, 'r') as fd:
                 out = fd.readlines()
