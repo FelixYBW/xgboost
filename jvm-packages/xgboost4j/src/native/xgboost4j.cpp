@@ -249,7 +249,7 @@ class JRecordBatchReader : public arrow::RecordBatchReader {
           arrow_field = std::make_shared<arrow::Field>("v" + std::to_string(i), arrow::float64());
           array_data = arrow::ArrayData::Make(arrow::float64(), num_rows , data);
         } else {
-          (*env)->ThrowNew(env, (*env)->FindClass(env, "java/lang/Exception"), " data type should be float or double ");
+          (jenv_)->ThrowNew((jenv_)->FindClass("java/lang/Exception"), " data type should be float or double ");
         }
 
 
