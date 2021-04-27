@@ -31,16 +31,8 @@ struct GenericParameter : public XGBoostParameter<GenericParameter> {
   bool fail_on_invalid_gpu_id {false};
   // gpu page size in external memory mode, 0 means using the default.
   size_t gpu_page_size;
-  bool enable_experimental_json_serialization {true};
   bool validate_parameters {false};
 
-  void CheckDeprecated() {
-    if (this->n_gpus != 0) {
-      LOG(WARNING)
-          << "\nn_gpus: "
-          << this->__MANAGER__()->Find("n_gpus")->GetFieldInfo().description;
-    }
-  }
   /*!
    * \brief Configure the parameter `gpu_id'.
    *
@@ -74,25 +66,10 @@ struct GenericParameter : public XGBoostParameter<GenericParameter> {
         .set_default(0)
         .set_lower_bound(0)
         .describe("GPU page size when running in external memory mode.");
-    DMLC_DECLARE_FIELD(enable_experimental_json_serialization)
-        .set_default(true)
-        .describe("Enable using JSON for memory serialization (Python Pickle, "
-                  "rabit checkpoints etc.).");
     DMLC_DECLARE_FIELD(validate_parameters)
         .set_default(false)
         .describe("Enable checking whether parameters are used or not.");
-    DMLC_DECLARE_FIELD(n_gpus)
-        .set_default(0)
-        .set_range(0, 1)
-        .describe(
-"\n\tDeprecated. Single process multi-GPU training is no longer supported."
-"\n\tPlease switch to distributed training with one process per GPU."
-"\n\tThis can be done using Dask or Spark.  See documentation for details.");
   }
-
- private:
-  // number of devices to use (deprecated).
-  int n_gpus {0};  // NOLINT
 };
 }  // namespace xgboost
 
