@@ -688,7 +688,7 @@ void JustPartitionWithLeafsMaskColumn(const size_t row_indices_begin,
     }
     const int32_t sc = (*split_conditions)[nid + 1];
     const bst_uint si = (*split_ind)[nid + 1];
-    const int32_t cmp_value = ((int32_t)(columnar_data[si*rows_offset + i]) + (int32_t)(offsets[si]));
+    const int32_t cmp_value = ((int32_t)(columnar_data[(uint64_t)(si)*(uint64_t)(rows_offset) + i]) + (int32_t)(offsets[si]));
 
     nodes_ids[i] = 2*nid + !(cmp_value <= sc);
     if (((uint64_t)(1) << (nodes_ids[i]%64)) & *(mask+nodes_ids[i]/64)) {
@@ -725,7 +725,7 @@ void JustPartitionLastLayerColumn(const size_t row_indices_begin,
     const int32_t sc = (*split_conditions)[nid + 1];
     const bst_uint si = (*split_ind)[nid + 1];
     nodes_ids[i] = (uint16_t)(1) << 15;
-    const int32_t cmp_value = ((int32_t)(columnar_data[si*rows_offset + i]) + (int32_t)(offsets[si]));
+    const int32_t cmp_value = ((int32_t)(columnar_data[(uint64_t)(si)*(uint64_t)(rows_offset) + i]) + (int32_t)(offsets[si]));
     nodes_ids[i] |= (uint16_t)((*curr_level_nodes)[2*nid + !(cmp_value <= sc)]);
   }
 }
@@ -749,7 +749,7 @@ void JustPartitionColumnar(const size_t row_indices_begin,
     const uint32_t nid = nodes_ids[i];
     const int32_t sc = (*split_conditions)[nid + 1];
     const bst_uint si = (*split_ind)[nid + 1];
-    const int32_t cmp_value = ((int32_t)(columnar_data[si*rows_offset + i]) + (int32_t)(offsets[si]));
+    const int32_t cmp_value = ((int32_t)(columnar_data[(uint64_t)(si)*(uint64_t)(rows_offset) + i]) + (int32_t)(offsets[si]));
     nodes_ids[i] = 2*nid + !(cmp_value <= sc);
     if (((uint64_t)(1) << (nodes_ids[i]%64)) & *(mask + nodes_ids[i]/64)) {
       rows[++count] = i;
@@ -2258,7 +2258,7 @@ if(depth > 0) {
   //std::cout << "ExpandWithDepth finished" << std::endl;
   time_ExpandWithDepthWiseDense += get_time() - time_ExpandWithDepthWiseDense_t1;
 if(N_CALL % 100 == 0) {
-    std::cout << "[TIMER]:ExpandWithDepthWiseDense time,s: " <<  (double)(time_ExpandWithDepthWiseDense)/(double)(1000000000) << std::endl;
+    std::cout << "[TIMER]:ExpandWithDepthWiseDense time,s: " << (double)(time_ExpandWithDepthWiseDense)/(double)(1000000000) << std::endl;
     std::cout << "[TIMER]:    BuildLocalHistogramsDense time,s: " <<  (double)(time_BuildLocalHistogramsDense)/(double)(1000000000) << std::endl;
     std::cout << "[TIMER]:    DenseSync time,s: " <<  (double)(time_DenseSync)/(double)(1000000000) << std::endl;
     std::cout << "[TIMER]:        AllReduce time,s: " <<  (double)(time_AllReduce)/(double)(1000000000) << std::endl;
@@ -2384,6 +2384,7 @@ void QuantileHistMaker::Builder<GradientSumT>::Update(
       ExpandWithDepthWise(gmat, gmatb, column_matrix, p_fmat, p_tree, gpair_h);
     }
   }
+  uint64_t t1 = get_time();
 //std::cout << "Pstats update??? : " << p_tree->param.num_nodes << std::endl;
   for (int nid = 0; nid < p_tree->param.num_nodes; ++nid) {
 //std::cout << "nid: " << nid << std::endl;
@@ -2394,6 +2395,10 @@ void QuantileHistMaker::Builder<GradientSumT>::Update(
 //std::cout << "Pstats update??? finished" << std::endl;
   pruner_->Update(gpair, p_fmat, std::vector<RegTree*>{p_tree});
 //std::cout << "Pruner finished finished" << std::endl;
+    time_Prunner += get_time() - t1;
+  if (N_CALL % 100 == 0) {
+    std::cout << "[TIMER]:Prunner time,s: " <<  (double)(time_Prunner)/(double)(1000000000) << std::endl;
+  }
   builder_monitor_.Stop("Update");
 }
 
@@ -2473,7 +2478,7 @@ template<typename GradientSumT>
 bool QuantileHistMaker::Builder<GradientSumT>::UpdatePredictionCacheDense(
     const DMatrix* data,
     HostDeviceVector<bst_float>* p_out_preds, const int gid, const int ngroup, const GHistIndexMatrix* gmat_ptr) {
-  uint64_t t1 = 0;
+  uint64_t t1 = get_time();
   // p_last_fmat_ is a valid pointer as long as UpdatePredictionCache() is called in
   // conjunction with Update().
   if (!p_last_fmat_ || !p_last_tree_ || data != p_last_fmat_) {
@@ -2556,7 +2561,7 @@ bool QuantileHistMaker::Builder<GradientSumT>::UpdatePredictionCacheDense(
 
   builder_monitor_.Stop("UpdatePredictionCache");
   time_UpdatePredictionCacheDense += get_time() - t1;
-  if ((N_CALL + 1) % 100 == 0) {
+  if ((N_CALL) % 100 == 0) {
     std::cout << "[TIMER]:UpdatePredictionCacheDense time,s: " <<  (double)(time_UpdatePredictionCacheDense)/(double)(1000000000) << std::endl;
   }
   return true;
