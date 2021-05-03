@@ -1224,7 +1224,6 @@ class XGBClassifier(XGBModel, XGBClassifierBase):
             Feature matrix.
         ntree_limit : int
             Deprecated, use `iteration_range` instead.
-            trees).
         validate_features : bool
             When this is True, validate that the Booster's and data's feature_names are
             identical.  Otherwise, it is assumed that the feature_names are the same.

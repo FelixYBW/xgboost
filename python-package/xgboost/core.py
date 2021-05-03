@@ -1233,17 +1233,6 @@ class Booster(object):
                 params += [('eval_metric', eval_metric)]
         return params
 
-    def _configure_metrics(self, params: Union[Dict, List]) -> Union[Dict, List]:
-        if isinstance(params, dict) and 'eval_metric' in params \
-           and isinstance(params['eval_metric'], list):
-            params = dict((k, v) for k, v in params.items())
-            eval_metrics = params['eval_metric']
-            params.pop("eval_metric", None)
-            params = list(params.items())
-            for eval_metric in eval_metrics:
-                params += [('eval_metric', eval_metric)]
-        return params
-
     def __del__(self):
         if hasattr(self, 'handle') and self.handle is not None:
             _check_call(_LIB.XGBoosterFree(self.handle))

@@ -267,7 +267,6 @@ class Install(install.install):  # pylint: disable=too-many-instance-attributes
         self.use_hdfs = 0
         self.use_azure = 0
         self.use_s3 = 0
-        self.use_arrow = 0
 
         self.plugin_lz4 = 0
         self.plugin_dense_parser = 0
@@ -325,7 +324,6 @@ if __name__ == '__main__':
               'scikit-learn': ['scikit-learn'],
               'dask': ['dask', 'pandas', 'distributed'],
               'datatable': ['datatable'],
-              'pyarrow': ['pyarrow'],
               'plotting': ['graphviz', 'matplotlib']
           },
           maintainer='Hyunsu Cho',

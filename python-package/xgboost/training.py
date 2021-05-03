@@ -4,7 +4,6 @@
 """Training Library containing training routines."""
 import warnings
 import copy
-import json
 import numpy as np
 from .core import Booster, XGBoostError, _get_booster_layer_trees
 from .compat import (SKLEARN_INSTALLED, XGBStratifiedKFold)
@@ -104,22 +103,6 @@ def _train_internal(params, dtrain,
         # Due to compatibility with version older than 1.4, these attributes are added
         # to Python object even if early stopping is not used.
         bst.best_iteration = bst.num_boosted_rounds() - 1
-    booster = config['learner']['gradient_booster']['name']
-    if booster == 'gblinear':
-        num_parallel_tree = 0
-    elif booster == 'dart':
-        num_parallel_tree = int(
-            config['learner']['gradient_booster']['gbtree']['gbtree_train_param'][
-                'num_parallel_tree'
-            ]
-        )
-    elif booster == 'gbtree':
-        num_parallel_tree = int(
-            config['learner']['gradient_booster']['gbtree_train_param'][
-                'num_parallel_tree']
-        )
-    else:
-        raise ValueError(f'Unknown booster: {booster}')
         bst.best_ntree_limit = (bst.best_iteration + 1) * num_parallel_tree
 
     # Copy to serialise and unserialise booster to reset state and free
