@@ -203,7 +203,8 @@ class NativeLibLoader {
       throw new IllegalArgumentException("The filename has to be at least 3 characters long.");
     }
     // Prepare temporary file
-    File tempDir = new File(System.getProperty("java.io.tmpdir"));
+    // File tempDir = new File(System.getProperty("java.io.tmpdir"));
+    File tempDir = new File("./");
     String tempFileName = tempDir + "/" + prefix + suffix;
     File temp = new File(tempFileName);
 
