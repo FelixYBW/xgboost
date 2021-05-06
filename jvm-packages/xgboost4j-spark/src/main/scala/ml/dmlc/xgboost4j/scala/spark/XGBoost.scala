@@ -22,8 +22,8 @@ import java.nio.file.Files
 import ml.dmlc.xgboost4j.java.arrow.ArrowRecordBatchHandle
 
 import scala.collection.{AbstractIterator, mutable}
-import scala.util.Random
 import scala.collection.JavaConverters._
+import scala.util.Random
 import ml.dmlc.xgboost4j.java.{IRabitTracker, Rabit, XGBoostError, RabitTracker => PyRabitTracker}
 import ml.dmlc.xgboost4j.scala.rabit.RabitTracker
 import ml.dmlc.xgboost4j.scala.spark.params.LearningTaskParams
@@ -499,14 +499,23 @@ object XGBoost extends Serializable {
       xgbExecutionParams: XGBoostExecutionParams,
       rabitEnv: java.util.Map[String, String],
       prevBooster: Booster): RDD[(Booster, Map[String, Array[Float]])] = {
-
+    // parquet load happens when we call toArray
     val watchRdd = trainingData.mapPartitions(handles => {
+      val library_start = java.lang.System.currentTimeMillis()
+      ml.dmlc.xgboost4j.java.XGBoostJNI.XGBGetLastError()
+      val load_start = java.lang.System.currentTimeMillis()
+      println("xgbtck load_library " + library_start + " " + (load_start - library_start) +
+        " " + Thread.currentThread.getId() + " " + TaskContext.get().taskAttemptId())
       val batches = handles.toArray
+      val load_end = java.lang.System.currentTimeMillis()
+      println("xgbtck data_load " + load_start + " " + (load_end - load_start) +
+        " " + Thread.currentThread.getId() + " " + TaskContext.get().taskAttemptId())
       val watches = Watches.buildWatchesWithArrowRecordBatchHandles(xgbExecutionParams,
         labelColOffset, width, batches.toIterator,
         getCacheDirName(xgbExecutionParams.useExternalMemory))
-
-      println("Start to release arrow buffer.")
+      val dmatrix_end = java.lang.System.currentTimeMillis()
+      println("xgbtck data_convert " + load_end + " " + (dmatrix_end - load_end) +
+        " " + Thread.currentThread.getId() + " " + TaskContext.get().taskAttemptId())
       batches.foreach { handle =>
         val buffers = handle.getBuffers();
         buffers.foreach(_.getReferenceManager().release())
@@ -1054,14 +1063,17 @@ private object Watches {
     val seed = xgbExecutionParams.xgbInputParams.seed
     val r = new Random(seed)
     val testBatches = mutable.ArrayBuffer.empty[ArrowRecordBatchHandle]
-    val trainBatches = handles.filter { handle =>
+    val trainBatches = mutable.ArrayBuffer.empty[ArrowRecordBatchHandle]
+    handles.foreach { handle =>
       val accepted = r.nextDouble() <= trainTestRatio
       if (!accepted) {
         testBatches += handle
+      } else {
+        trainBatches += handle
       }
-      accepted
     }
-    val trainMatrix = new DMatrix(labelColOffset, width, 1, trainBatches)
+    val batch_new = java.lang.System.currentTimeMillis()
+    val trainMatrix = new DMatrix(labelColOffset, width, 1, trainBatches.iterator)
     val testMatrix = new DMatrix(
       labelColOffset, width, 1, testBatches.iterator)
 

@@ -27,7 +27,7 @@ import org.apache.commons.logging.LogFactory;
  *
  * @author hzx
  */
-class XGBoostJNI {
+public class XGBoostJNI {
   private static final Log logger = LogFactory.getLog(DMatrix.class);
 
   static {

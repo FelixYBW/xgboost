@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <limits>
 #include <rabit/c_api.h>
+#include <dmlc/timer.h>
 #include <xgboost/c_api.h>
 #include <xgboost/base.h>
 #include <xgboost/logging.h>
@@ -279,6 +280,7 @@ class JRecordBatchReader : public arrow::RecordBatchReader {
  */
 JNIEXPORT jint JNICALL Java_ml_dmlc_xgboost4j_java_XGBoostJNI_XGDMatrixCreateByRecordBatchIters
     (JNIEnv *jenv, jclass jcls, jint label_name_offset, jint width, jint nthread, jobject jiter, jlongArray jout) {
+
   DMatrixHandle result;
   std::unique_ptr<arrow::RecordBatchReader> jr;
   jr.reset(new JRecordBatchReader(jenv, jiter, width));

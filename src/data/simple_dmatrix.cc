@@ -59,6 +59,9 @@ DMatrix* SimpleDMatrix::Combine(DMatrix* right, uint64_t total_size, int nThread
   Info().labels_.Extend(right->Info().labels_);
   Info().base_margin_.Extend(right->Info().base_margin_);
   Info().weights_.Extend(right->Info().weights_);
+
+  std::cout << "xgbtck dmatrix_combine " << total_size << " " << this->Info().num_row_ << std::endl;
+
   /*
    * TODO: Currently, the Combine method doesn't support the learning-to-rank
    * usecase. Combining group_ptr_ vectors is therefore disabled.
