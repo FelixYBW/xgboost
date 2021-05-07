@@ -355,7 +355,6 @@ def _from_dt_df(data, missing, nthread, feature_names, feature_types):
 def _is_arrow_table(data):
     return lazy_isinstance(data, 'pyarrow.lib', 'Table')
 def _from_arrow_table(data, missing, nthread, feature_names, feature_types):
-    nthread = -1
     handle = ctypes.c_void_p()
     _check_call(_LIB.XGDMatrixCreateFromArrowTable(
         ctypes.py_object(data),
@@ -609,6 +608,7 @@ def dispatch_data_backend(data, missing, threads,
                                    feature_types)
     if _is_arrow_table(data):
         return _from_arrow_table(data, missing, threads, feature_names,
+                                   feature_types)
     if _has_array_protocol(data):
         pass
 
