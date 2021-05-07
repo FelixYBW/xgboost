@@ -5,7 +5,7 @@
 #include "arrow/api.h"
 #include "arrow/filesystem/filesystem.h"
 #include "parquet/arrow/reader.h"
-
+#if 0
 const char* input_file = "/home/zhang/data/part-00000-aaf240ad-65cb-4ed9-bd05-1f11de010af2-c000.snappy.parquet";
 const char* label_name = "delinquency_12";
 
@@ -83,3 +83,6 @@ int main()
   }
 }
 
+#endif
+int main()
+{}
