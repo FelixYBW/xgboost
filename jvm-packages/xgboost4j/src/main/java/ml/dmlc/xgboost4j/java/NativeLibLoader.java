@@ -114,55 +114,13 @@ class NativeLibLoader {
    */
   private static void loadLibraryFromJar(String path) throws IOException, IllegalArgumentException {
 
-    File lockFile = new File(System.getProperty("java.io.tmpdir") + "/xgb.lck");
-    FileOutputStream outStream = null;
-    FileLock lock = null;
+    String temp = createTempFileFromResource(path);
+    // Finally, load the library
+    File f = new File(temp);
 
-    try {
-      outStream = new FileOutputStream(lockFile);
-      FileChannel channel = outStream.getChannel();
-      try {
-        lock = channel.lock();
-        String temp = createTempFileFromResource(path);
-        // Finally, load the library
-        File f = new File(temp);
+    System.out.println("lib file " + temp + " size is "+f.length());
 
-        System.out.println("lib file " + temp + " size is "+f.length());
-
-        /*
-        if(temp.endsWith("libarrow.so"))
-        {
-          File f17 = new File(temp+".17");
-          if(f17.exists()) {
-            f17.delete();
-          }
-          f.renameTo(f17);
-          temp = temp + ".17";
-        }
-        */
-        System.load(temp);
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
-    } catch (FileNotFoundException e) {
-      System.out.println(" lock file not found");
-    } finally {
-      if(null != lock){
-        try {
-          System.out.println("Release The Lock"  + new java.util.Date().toString());
-          lock.release();
-        } catch (IOException e) {
-          e.printStackTrace();
-        }
-      }
-      if(outStream != null){
-        try {
-          outStream.close();
-        } catch (IOException e) {
-          e.printStackTrace();
-        }
-      }
-    }
+    System.load(temp);
   }
 
   /**
@@ -203,7 +161,7 @@ class NativeLibLoader {
       throw new IllegalArgumentException("The filename has to be at least 3 characters long.");
     }
     // Prepare temporary file
-    // File tempDir = new File(System.getProperty("java.io.tmpdir"));
+    //File tempDir = new File(System.getProperty("java.io.tmpdir"));
     File tempDir = new File("./");
     String tempFileName = tempDir + "/" + prefix + suffix;
     File temp = new File(tempFileName);

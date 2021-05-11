@@ -260,9 +260,9 @@ public class XGBoost {
           }
         }
         if (Rabit.getRank() == 0 && shouldPrint(params, iter)) {
-          if (shouldPrint(params, iter)){
-            Rabit.trackerPrint(evalInfo + '\n');
-          }
+          // if (shouldPrint(params, iter)){
+          Rabit.trackerPrint(evalInfo + '\n');
+          // }
         }
       }
       booster.saveRabitCheckpoint();
