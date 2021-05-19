@@ -112,6 +112,7 @@ public class RabitTracker implements IRabitTracker {
       assert reader.readLine().trim().equals("DMLC_TRACKER_ENV_START");
       String line;
       while ((line = reader.readLine()) != null) {
+        System.out.println(line);
         if (line.trim().equals("DMLC_TRACKER_ENV_END")) {
           break;
         }
@@ -130,9 +131,11 @@ public class RabitTracker implements IRabitTracker {
 
   private boolean startTrackerProcess() {
     try {
-      String trackerExecString = this.addTrackerProperties("python " + tracker_py +
+      String trackerExecString = this.addTrackerProperties("python '" + tracker_py +
+          "' --log-level=DEBUG --num-workers=" + String.valueOf(numWorkers));
+      System.out.println("xgbtck rapid tracker, start");
+      System.out.println("python " + tracker_py +
           " --log-level=DEBUG --num-workers=" + String.valueOf(numWorkers));
-
       trackerProcess.set(Runtime.getRuntime().exec(trackerExecString));
       loadEnvs(trackerProcess.get().getInputStream());
       return true;
@@ -168,8 +171,8 @@ public class RabitTracker implements IRabitTracker {
     }
 
     if (startTrackerProcess()) {
-      logger.debug("Tracker started, with env=" + envs.toString());
-      System.out.println("Tracker started, with env=" + envs.toString());
+      logger.info("Tracker started, with env=" + envs.toString());
+      // System.out.println("Tracker started, with env=" + envs.toString());
       // also start a tracker logger
       Thread logger_thread = new Thread(new TrackerProcessLogger());
       logger_thread.setDaemon(true);
