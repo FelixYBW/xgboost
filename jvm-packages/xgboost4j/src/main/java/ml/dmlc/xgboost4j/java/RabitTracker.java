@@ -131,8 +131,8 @@ public class RabitTracker implements IRabitTracker {
 
   private boolean startTrackerProcess() {
     try {
-      String trackerExecString = this.addTrackerProperties("python '" + tracker_py +
-          "' --log-level=DEBUG --num-workers=" + String.valueOf(numWorkers));
+      String trackerExecString = this.addTrackerProperties("python " + tracker_py +
+          " --log-level=DEBUG --num-workers=" + String.valueOf(numWorkers));
       System.out.println("xgbtck rapid tracker, start");
       System.out.println("python " + tracker_py +
           " --log-level=DEBUG --num-workers=" + String.valueOf(numWorkers));
