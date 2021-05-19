@@ -259,7 +259,8 @@ public class XGBoost {
             break;
           }
         }
-        if (Rabit.getRank() == 0 && shouldPrint(params, iter)) {
+        // if (Rabit.getRank() == 0 && shouldPrint(params, iter)) {
+        if (Rabit.getRank() == 0) {
           // if (shouldPrint(params, iter)){
           Rabit.trackerPrint(evalInfo + '\n');
           // }
