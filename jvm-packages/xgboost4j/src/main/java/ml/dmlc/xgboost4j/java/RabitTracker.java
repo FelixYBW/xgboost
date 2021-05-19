@@ -132,7 +132,8 @@ public class RabitTracker implements IRabitTracker {
     try {
       String trackerExecString = this.addTrackerProperties("python " + tracker_py +
           " --log-level=DEBUG --num-workers=" + String.valueOf(numWorkers));
-
+      System.out.println("pythonxxxx \"" + tracker_py +
+          "\" --log-level=DEBUG --num-workers=" + String.valueOf(numWorkers));
       trackerProcess.set(Runtime.getRuntime().exec(trackerExecString));
       loadEnvs(trackerProcess.get().getInputStream());
       return true;
